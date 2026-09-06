@@ -137,6 +137,7 @@ The protocol itself was reverse-engineered by extracting the per-product signal 
 - Routing GETs always return `00 00` regardless of what was last set — UserDefaults persistence is the only way to remember routes across launches.
 - Matrix-source assignment silently fails if the source is already wired to another channel — the app does an explicit `.off` disconnect on the previous owner first.
 - The `setMonitorMono` USB command crashes the firmware when sent from our process, even with byte-perfect parity to MixControl. Probably an undocumented authorization handshake at startup we haven't identified — the Mn button is hidden until we crack it.
+- The 18i20 has no dedicated "Phones" output, unlike the 8i6/18i6/18i8/6i6. Its front-panel headphone jacks are hardwired analog taps of Line Out 7/8 (Headphone 1) and Line Out 9/10 (Headphone 2) — confirmed by Focusrite's own support docs for the 18i20 across 1st/2nd/3rd gen. Route to those Line outputs in the Routing tab to reach the front jacks; the pinned Phones strip is hidden for this profile rather than pointing at the wrong pair.
 
 For full deep-dive, read the commit history — `d175367` (the matrix-mixer breakthrough) and `1294ff7` (feature parity additions) cover most of the protocol reasoning.
 

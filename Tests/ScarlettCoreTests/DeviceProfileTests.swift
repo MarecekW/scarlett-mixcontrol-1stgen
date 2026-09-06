@@ -83,4 +83,23 @@ final class DeviceProfileTests: XCTestCase {
         XCTAssertEqual(MixBus.m1.rawValue, 0x14)
         XCTAssertEqual(MixBus.m6.rawValue, 0x19)
     }
+
+    /// The 18i20 has no dedicated "Phones" output — its front headphone
+    /// jacks are hardwired analog taps of Line 7/8 and Line 9/10 (confirmed
+    /// by Focusrite's own support docs for the 18i20 across 1st/2nd/3rd
+    /// gen). Code that keys off `pairLabel == "Phones"` (pinned-strip
+    /// resolution, factory-reset defaults) must not silently invent one by
+    /// falling back to a wrong wValue such as the 8i6's 2/3.
+    func test18i20HasNoDedicatedPhonesOutputAndLabelsTheHeadphoneTaps() {
+        let outputs = DeviceProfile.scarlett18i20.physicalOutputs
+        XCTAssertTrue(
+            outputs.filter { $0.pairLabel == "Phones" }.isEmpty,
+            "18i20 should not claim a dedicated Phones output pair"
+        )
+
+        let headphone1 = outputs.filter { $0.wValue == 0x06 || $0.wValue == 0x07 }
+        let headphone2 = outputs.filter { $0.wValue == 0x08 || $0.wValue == 0x09 }
+        XCTAssertTrue(headphone1.allSatisfy { $0.displayName.contains("Headphone 1") })
+        XCTAssertTrue(headphone2.allSatisfy { $0.displayName.contains("Headphone 2") })
+    }
 }

@@ -148,53 +148,77 @@ struct PinnedDawStrip: View {
 struct PinnedMasterStrip: View {
     @Bindable var state: MixerState
 
+    /// Resolves a `pairLabel`'s wValue pair from the connected profile rather
+    /// than assuming the 8i6's fixed 0/1/2/3 layout. The 18i20 has no
+    /// "Phones" pairLabel at all — its headphone jacks are hardwired taps of
+    /// Line 7/8 + Line 9/10 (see `DeviceProfile.scarlett18i20`) — so that
+    /// strip is omitted for it below rather than pointing at the wrong pair.
+    private static func wValues(in profile: DeviceProfile, pairLabel: String) -> (left: UInt16, right: UInt16)? {
+        let outs = profile.physicalOutputs.filter { $0.pairLabel == pairLabel }
+        guard let left = outs.first(where: \.isLeft), let right = outs.first(where: { !$0.isLeft }) else {
+            return nil
+        }
+        return (left.wValue, right.wValue)
+    }
+
+    private var monitor: (left: UInt16, right: UInt16)? {
+        Self.wValues(in: state.profile, pairLabel: "Monitor")
+    }
+    private var phones: (left: UInt16, right: UInt16)? {
+        Self.wValues(in: state.profile, pairLabel: "Phones")
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
-            OutputStrip(
-                state: state,
-                title: "Monitor",
-                subtitle: "Out 1+2",
-                atten: Binding(
-                    get: { state.monitorAtten },
-                    set: { state.userSetMonitorAtten($0) }
-                ),
-                leftWValue: 0,
-                rightWValue: 1,
-                leftMuted: state.monitorLMuted,
-                rightMuted: state.monitorRMuted,
-                toggleLeft: {
-                    state.userSetSideMute(bus: .monitorLeft, muted: !state.monitorLMuted)
-                },
-                toggleRight: {
-                    state.userSetSideMute(bus: .monitorRight, muted: !state.monitorRMuted)
-                },
-                showDim: true,
-                dimActive: state.dimEnabled,
-                toggleDim: { state.userToggleDim() }
-            )
+            if let monitor {
+                OutputStrip(
+                    state: state,
+                    title: "Monitor",
+                    subtitle: "Out \(monitor.left + 1)+\(monitor.right + 1)",
+                    atten: Binding(
+                        get: { state.monitorAtten },
+                        set: { state.userSetMonitorAtten($0) }
+                    ),
+                    leftWValue: monitor.left,
+                    rightWValue: monitor.right,
+                    leftMuted: state.monitorLMuted,
+                    rightMuted: state.monitorRMuted,
+                    toggleLeft: {
+                        state.userSetSideMute(bus: .monitorLeft, muted: !state.monitorLMuted)
+                    },
+                    toggleRight: {
+                        state.userSetSideMute(bus: .monitorRight, muted: !state.monitorRMuted)
+                    },
+                    showDim: true,
+                    dimActive: state.dimEnabled,
+                    toggleDim: { state.userToggleDim() }
+                )
+            }
 
-            OutputStrip(
-                state: state,
-                title: "Phones",
-                subtitle: "Out 3+4",
-                atten: Binding(
-                    get: { state.phonesAtten },
-                    set: { state.userSetPhonesAtten($0) }
-                ),
-                leftWValue: 2,
-                rightWValue: 3,
-                leftMuted: state.phonesLMuted,
-                rightMuted: state.phonesRMuted,
-                toggleLeft: {
-                    state.userSetSideMute(bus: .phonesLeft, muted: !state.phonesLMuted)
-                },
-                toggleRight: {
-                    state.userSetSideMute(bus: .phonesRight, muted: !state.phonesRMuted)
-                },
-                showDim: false,
-                dimActive: false,
-                toggleDim: {}
-            )
+            if let phones {
+                OutputStrip(
+                    state: state,
+                    title: "Phones",
+                    subtitle: "Out \(phones.left + 1)+\(phones.right + 1)",
+                    atten: Binding(
+                        get: { state.phonesAtten },
+                        set: { state.userSetPhonesAtten($0) }
+                    ),
+                    leftWValue: phones.left,
+                    rightWValue: phones.right,
+                    leftMuted: state.phonesLMuted,
+                    rightMuted: state.phonesRMuted,
+                    toggleLeft: {
+                        state.userSetSideMute(bus: .phonesLeft, muted: !state.phonesLMuted)
+                    },
+                    toggleRight: {
+                        state.userSetSideMute(bus: .phonesRight, muted: !state.phonesRMuted)
+                    },
+                    showDim: false,
+                    dimActive: false,
+                    toggleDim: {}
+                )
+            }
         }
     }
 }
