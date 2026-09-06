@@ -110,10 +110,19 @@ final class MixerState {
     // Attenuation sliders: -60...0 dB range, default 0 = no attenuation.
     // We start sliders at 0 dB but DO NOT push that value to the device on
     // launch (the user might be running at -20 dB right now and we'd boost
-    // them). First `userDidChange*` call sends the value.
-    var monitorAtten: Double = 0
-    var phonesAtten: Double  = 0
+    // them). First user change sends the value.
+    //
+    // Output gain stages are per-physical-output (stage = wValue + 1 on the
+    // device).  One fader per stereo pair, keyed by the pair's LEFT output
+    // wValue; per-side mutes keyed by each output's own wValue.
+    var pairAttens: [UInt16: Double] = [:]
+    var outputMutes: [UInt16: Bool] = [:]
     var masterMuted: Bool    = false
+
+    /// Which output pairs (by `PhysicalOutput.pairLabel`) are shown as pinned
+    /// strips in the mixer.  Persisted per device.  Any pair — including
+    /// Monitor — can be hidden; the Outputs menu brings them back.
+    var visiblePairLabels: Set<String> = []
 
     // Input switches — defaults are conservative (line / lo). Not pushed on launch.
     var impedance1: Impedance = .line
@@ -141,11 +150,31 @@ final class MixerState {
     /// monitor outputs.  Useful for mono-compatibility checks while mixing.
     var monitorMono: Bool = false
 
-    // Per-side independent mutes (vs the global master mute).
-    var monitorLMuted: Bool = false
-    var monitorRMuted: Bool = false
-    var phonesLMuted:  Bool = false
-    var phonesRMuted:  Bool = false
+    /// Mirror of the 18i20's hardware monitor section (front-panel volume
+    /// knob + DIM/MUTE buttons).  Polled ~1 Hz while connected; read-only —
+    /// the hardware owns these controls, the app just reflects them.
+    var hwMonitor: HardwareMonitorState? = nil
+
+    // MARK: - Output pair helpers
+
+    /// Output pair groups the user has chosen to pin in the mixer, in
+    /// profile order.
+    var visibleOutputGroups: [(label: String, outputs: [PhysicalOutput])] {
+        physicalOutputGroups.filter { visiblePairLabels.contains($0.label) }
+    }
+
+    /// The left output wValue of the first (Monitor) pair — the target of Dim.
+    var monitorPairLeftWValue: UInt16 {
+        physicalOutputGroups.first?.outputs.first?.wValue ?? 0
+    }
+
+    func pairAtten(leftWValue: UInt16) -> Double { pairAttens[leftWValue] ?? 0 }
+    func outputMuted(_ wValue: UInt16) -> Bool { outputMutes[wValue] ?? false }
+
+    private func pairMembers(leftWValue: UInt16) -> [UInt16] {
+        physicalOutputGroups.first { $0.outputs.first?.wValue == leftWValue }?
+            .outputs.map(\.wValue) ?? [leftWValue]
+    }
 
     /// Per-USB-capture-channel routing — what the DAW sees on each of its
     /// input channels.  6 entries (DAW input 1..6).  Default values mirror
@@ -392,6 +421,7 @@ final class MixerState {
     private static let captureRoutesKeyPrefix = "scarlett.captureRoutes.v2"
     private static let monitorMonoKeyPrefix   = "scarlett.monitorMono.v2"
     private static let firstLaunchDoneKeyPrefix = "scarlett.firstLaunchCompleted.v2"
+    private static let visibleOutputsKeyPrefix  = "scarlett.visibleOutputs.v1"
 
     private func routesKey(for profile: DeviceProfile) -> String {
         "\(Self.routesKeyPrefix).\(profile.productID)"
@@ -410,6 +440,9 @@ final class MixerState {
     }
     private func firstLaunchDoneKey(for profile: DeviceProfile) -> String {
         "\(Self.firstLaunchDoneKeyPrefix).\(profile.productID)"
+    }
+    private func visibleOutputsKey(for profile: DeviceProfile) -> String {
+        "\(Self.visibleOutputsKeyPrefix).\(profile.productID)"
     }
 
     private func ensureMatrixSizing(for profile: DeviceProfile) {
@@ -430,6 +463,17 @@ final class MixerState {
         captureRoutes = [:]
         selectedBus = profile.matrixOutputBuses.first ?? .m1
 
+        pairAttens = [:]
+        outputMutes = [:]
+        // Default pinned output strips: the first two pairs (Monitor + the
+        // next pair — Phones on the compact models, Line 3+4 on the 18i20).
+        // The user can pin more from the mixer's Outputs menu.
+        var order: [String] = []
+        for out in profile.physicalOutputs where !order.contains(out.pairLabel) {
+            order.append(out.pairLabel)
+        }
+        visiblePairLabels = Set(order.prefix(2))
+
         mixerSources = Array(repeating: .off, count: profile.matrixInputCount)
         mixerLevels = Array(
             repeating: Array(repeating: 0, count: profile.stereoPairCount),
@@ -445,6 +489,7 @@ final class MixerState {
         linkedPairs = []
 
         monitorMono = false
+        hwMonitor = nil
         showFirstLaunchPrompt = false
         peaks = .empty
         peaksHeld = .empty
@@ -510,6 +555,14 @@ final class MixerState {
         }
 
         monitorMono = defaults.bool(forKey: monitorMonoKey(for: profile))
+
+        // Pinned output pairs — restore the user's choice, dropping labels
+        // that don't exist on this profile (stale data from another build).
+        if let saved = defaults.stringArray(forKey: visibleOutputsKey(for: profile)) {
+            let valid = Set(profile.physicalOutputs.map(\.pairLabel))
+            let filtered = Set(saved).intersection(valid)
+            if !filtered.isEmpty { visiblePairLabels = filtered }
+        }
 
         // Selected bus tab
         if let raw = defaults.object(forKey: busTabKey(for: profile)) as? UInt8,
@@ -649,15 +702,26 @@ final class MixerState {
         if let v = try? dev.getHiLoGain(channel: 3)       { hi3 = v }
         if let v = try? dev.getHiLoGain(channel: 4)       { hi4 = v }
         if let v = try? dev.getMute(.master)              { masterMuted = v }
-        if let v = try? dev.getMute(.monitorLeft)         { monitorLMuted = v }
-        if let v = try? dev.getMute(.monitorRight)        { monitorRMuted = v }
-        if let v = try? dev.getMute(.phonesLeft)          { phonesLMuted = v }
-        if let v = try? dev.getMute(.phonesRight)         { phonesRMuted = v }
-        // Use the average of L/R for the mono "Monitor" / "Phones" sliders.
-        if let l = try? dev.getAttenuation(.monitorLeft),
-           let r = try? dev.getAttenuation(.monitorRight) { monitorAtten = (l + r) / 2 }
-        if let l = try? dev.getAttenuation(.phonesLeft),
-           let r = try? dev.getAttenuation(.phonesRight)  { phonesAtten = (l + r) / 2 }
+        // Read every physical output's gain stage (stage = wValue + 1).
+        // Per-side mutes are kept as-is; the pair fader shows the L/R average.
+        // Individual reads that fail (a stage the firmware doesn't back)
+        // leave the previous value — same policy as every other read here.
+        for group in physicalOutputGroups {
+            var attens: [Double] = []
+            // Only outputs with a functional stage — digital outs store
+            // values without applying them, so reading those is noise.
+            for out in group.outputs where profile.hasGainStage(wValue: out.wValue) {
+                if let m = try? dev.getOutputMute(outputWValue: out.wValue) {
+                    outputMutes[out.wValue] = m
+                }
+                if let a = try? dev.getOutputAttenuation(outputWValue: out.wValue) {
+                    attens.append(a)
+                }
+            }
+            if let left = group.outputs.first?.wValue, !attens.isEmpty {
+                pairAttens[left] = attens.reduce(0, +) / Double(attens.count)
+            }
+        }
         // Routing GETs are still not trustworthy: byte 0x00 decodes to
         // .daw1, which is also what we'd get from a "null" 00 00 response.
         // We can't distinguish "device says DAW 1" from "device says
@@ -797,6 +861,24 @@ final class MixerState {
                     }
                 }
 
+                // Mirror the hardware monitor section (18i20 front-panel
+                // knob + DIM/MUTE) every tick so the fader tracks the knob
+                // smoothly. One extra 4-byte transfer per poll — cheap.
+                if self.profile.hasHardwareMonitorControls,
+                   let hw = try? dev.getHardwareMonitorControls() {
+                    if let old = self.hwMonitor {
+                        if old.dim != hw.dim {
+                            self.logEvent(.info, "Monitor",
+                                hw.dim ? "Hardware Dim engaged" : "Hardware Dim released")
+                        }
+                        if old.mute != hw.mute {
+                            self.logEvent(.info, "Monitor",
+                                hw.mute ? "Hardware Mute engaged" : "Hardware Mute released")
+                        }
+                    }
+                    if self.hwMonitor != hw { self.hwMonitor = hw }
+                }
+
                 // 83 ms ≈ 12 Hz. Each readPeaks() does 3 USB control transfers
                 // (inputs/DAW/mixer) which aren't free on macOS — kernel
                 // transitions ~1-5 ms each — so polling alone is most of our
@@ -810,22 +892,39 @@ final class MixerState {
     // MARK: - User actions (every public mutator goes through here so we
     // can ignore programmatic updates and surface errors uniformly)
 
-    func userSetMonitorAtten(_ db: Double) {
-        monitorAtten = db
+    /// Set the fader for one output pair (identified by its left wValue) —
+    /// pushes the same attenuation to every output in the pair.
+    /// No-op on pairs without a functional gain stage (digital outs).
+    func userSetPairAtten(leftWValue: UInt16, db: Double) {
+        guard profile.hasGainStage(wValue: leftWValue) else { return }
+        pairAttens[leftWValue] = db
         guard let dev = device else { return }
+        let members = pairMembers(leftWValue: leftWValue)
         writeAsync {
-            try? dev.setAttenuation(.monitorLeft,  db: db)
-            try? dev.setAttenuation(.monitorRight, db: db)
+            for wv in members {
+                try? dev.setOutputAttenuation(outputWValue: wv, db: db)
+            }
         }
     }
 
-    func userSetPhonesAtten(_ db: Double) {
-        phonesAtten = db
+    /// Mute/unmute one physical output (one side of a pair).
+    /// No-op on outputs without a functional gain stage (digital outs).
+    func userSetOutputMute(wValue: UInt16, muted: Bool) {
+        guard profile.hasGainStage(wValue: wValue) else { return }
+        outputMutes[wValue] = muted
         guard let dev = device else { return }
-        writeAsync {
-            try? dev.setAttenuation(.phonesLeft,  db: db)
-            try? dev.setAttenuation(.phonesRight, db: db)
+        writeAsync { try? dev.setOutputMute(outputWValue: wValue, muted: muted) }
+    }
+
+    /// Show/hide an output pair's pinned strip.
+    func userToggleOutputPairVisible(label: String) {
+        if visiblePairLabels.contains(label) {
+            visiblePairLabels.remove(label)
+        } else {
+            visiblePairLabels.insert(label)
         }
+        UserDefaults.standard.set(Array(visiblePairLabels),
+                                  forKey: visibleOutputsKey(for: profile))
     }
 
     func userSetMasterMute(_ muted: Bool) {
@@ -965,7 +1064,22 @@ final class MixerState {
 
     func userSetMixerSource(channel: Int, source: SignalSource) {
         guard (0..<18).contains(channel) else { return }
+        // Steal the source from any other channel that holds it.  x42's 18i6
+        // notes say the firmware rejects double-assignment, but the 18i20
+        // demonstrably allows it (leftover flash state had DAW 3 on two
+        // channels at once) — and a duplicate silently double-feeds every
+        // bus, making the visible channel's fader appear dead.  Either way,
+        // disconnecting the previous owner first is correct on all models.
+        if source != .off {
+            for ch in 0..<18 where ch != channel && mixerSources[ch] == source {
+                mixerSources[ch] = .off
+                if let dev = device {
+                    writeAsync { try? dev.setMixerSource(channel: ch, source: .off) }
+                }
+            }
+        }
         mixerSources[channel] = source
+        saveMatrix()
         guard let dev = device else { return }
         writeAsync { try? dev.setMixerSource(channel: channel, source: source) }
     }
@@ -986,7 +1100,21 @@ final class MixerState {
     public static let pinnedDawLeftChannel: Int  = 14
     public static let pinnedDawRightChannel: Int = 15
 
+    /// True when this device reserves matrix channels 14+15 as the pinned
+    /// "DAW return" strip.  Only the compact models (8i6/6i6) do: their
+    /// physical inputs fit in the first 14 strips, channels 14-17 aren't on
+    /// screen, and DAW 1/2 is the Mac's system-audio output — worth a
+    /// dedicated return fader.  The 18-input models show all 18 channels as
+    /// regular strips, so nothing is reserved and every DAW playback pair is
+    /// wired like any other source.
+    var hasPinnedDawReturn: Bool {
+        profile.sources.filter {
+            $0.category == .analog || $0.category == .digital
+        }.count <= 14
+    }
+
     private func ensurePinnedDawChannels() {
+        guard hasPinnedDawReturn else { return }
         let l = Self.pinnedDawLeftChannel
         let r = Self.pinnedDawRightChannel
 
@@ -1397,7 +1525,9 @@ final class MixerState {
         // ensurePinnedDawChannels() below. Devices with more inputs than free
         // channels keep the earlier ones; unused channels stay Off.
         let physicalInputs = profile.sources.filter { $0.category == .analog || $0.category == .digital }
-        let pinnedChannels: Set<Int> = [Self.pinnedDawLeftChannel, Self.pinnedDawRightChannel]
+        let pinnedChannels: Set<Int> = hasPinnedDawReturn
+            ? [Self.pinnedDawLeftChannel, Self.pinnedDawRightChannel]
+            : []
         var defaultSources: [SignalSource] = Array(repeating: .off, count: 18)
         var seedIdx = 0
         for ch in 0..<18 where !pinnedChannels.contains(ch) {
@@ -1546,35 +1676,14 @@ final class MixerState {
 
     func userToggleDim() {
         dimEnabled.toggle()
-        guard let dev = device else { return }
+        guard device != nil else { return }
+        let monLeft = monitorPairLeftWValue
         if dimEnabled {
-            preDimMonitorAtten = monitorAtten
-            let dimmed = max(-128, monitorAtten - 20)
-            monitorAtten = dimmed
-            writeAsync {
-                try? dev.setAttenuation(.monitorLeft,  db: dimmed)
-                try? dev.setAttenuation(.monitorRight, db: dimmed)
-            }
+            preDimMonitorAtten = pairAtten(leftWValue: monLeft)
+            userSetPairAtten(leftWValue: monLeft, db: max(-128, preDimMonitorAtten - 20))
         } else {
-            let restore = preDimMonitorAtten
-            monitorAtten = restore
-            writeAsync {
-                try? dev.setAttenuation(.monitorLeft,  db: restore)
-                try? dev.setAttenuation(.monitorRight, db: restore)
-            }
+            userSetPairAtten(leftWValue: monLeft, db: preDimMonitorAtten)
         }
-    }
-
-    func userSetSideMute(bus: SignalOut, muted: Bool) {
-        switch bus {
-        case .monitorLeft:  monitorLMuted = muted
-        case .monitorRight: monitorRMuted = muted
-        case .phonesLeft:   phonesLMuted  = muted
-        case .phonesRight:  phonesRMuted  = muted
-        default: return
-        }
-        guard let dev = device else { return }
-        writeAsync { try? dev.setMute(bus, muted: muted) }
     }
 
     // MARK: - Save

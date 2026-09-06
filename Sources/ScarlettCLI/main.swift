@@ -155,6 +155,16 @@ usage: scarlett-cli <command> [args]
   set-mixgain <chan 0..17> <m1..m6> <db>
       Matrix-mixer per-cell gain. -128 <= db <= +6.
 
+  monitor-hw [--watch]
+      Read the hardware monitor section (18i20 knob + DIM/MUTE buttons),
+      once or continuously. Shows raw bytes — press the front-panel
+      buttons while watching to see which byte tracks which control.
+
+  probe-output <wValue|all>
+      SET→GET roundtrip on a physical output's attenuation + mute stage
+      (stage index = route wValue + 1). Restores prior values. Use this to
+      verify which outputs have a real gain stage on your device.
+
   save
       Persist current settings to device flash. Survives power cycle.
 """
@@ -215,16 +225,16 @@ func main() throws {
             print("\(r.displayName.padding(toLength: 14, withPad: " ", startingAt: 0))  ← \(src)   [raw: \(rawHex)]")
         }
         print()
-        print("Matrix mixer sources (channels 0..13):")
-        for ch in 0..<14 {
+        print("Matrix mixer sources (channels 0..17):")
+        for ch in 0..<18 {
             let raw = (try? dev.controlIn(cmd: 0x01, value: 0x0600 + UInt16(ch), index: 0x3200, length: 2)) ?? []
             let rawHex = raw.map { String(format: "%02x", $0) }.joined(separator: " ")
             let src = tryRead("msrc") { try dev.getMixerSource(channel: ch) }
             print("  ch\(String(format: "%2d", ch))  ← \(src)   [raw: \(rawHex)]")
         }
         print()
-        print("Matrix mixer gains, channel 0 → M1..M6:")
-        for bus in MixBus.matrixOutputs {
+        print("Matrix mixer gains, channel 0 → M1..M\(dev.profile.mixBusCount):")
+        for bus in dev.profile.matrixOutputBuses {
             guard let idx = bus.matrixIndex else { continue }
             let mtx = UInt16(0 << 3) + UInt16(idx)
             let raw = (try? dev.controlIn(cmd: 0x01, value: 0x0100 + mtx, index: 0x3c00, length: 2)) ?? []
@@ -334,6 +344,76 @@ func main() throws {
         let db  = try parseDouble(try need(args, 2, "db"), "db")
         try dev.setMixerGain(channel: ch, bus: bus, db: db)
         print("✓ mixer ch\(ch) → \(bus) at \(db) dB")
+
+    case "monitor-hw":
+        func readAndPrint() throws {
+            let raw = try dev.controlIn(cmd: 0x03, value: 0x0004, index: 0x3c00, length: 4)
+            let hex = raw.map { String(format: "%02x", $0) }.joined(separator: " ")
+            let s = try dev.getHardwareMonitorControls()
+            print("raw: [\(hex)]   knob: \(String(format: "%5.1f", s.potAttenuationDb)) dB   dim: \(s.dim ? "ON " : "off")   mute: \(s.mute ? "ON " : "off")")
+        }
+        if args.contains("--watch") {
+            print("Polling hardware monitor section every 200ms — Ctrl-C to stop.")
+            print("Press the front-panel DIM and MUTE buttons and turn the knob.\n")
+            while true {
+                try readAndPrint()
+                usleep(200_000)
+            }
+        } else {
+            try readAndPrint()
+        }
+
+    case "probe-output":
+        // Verify that a physical output's post-routing gain stage responds:
+        // read attenuation, write -40 dB, read back, restore. A stage that
+        // exists reads back ≈ -40; a bogus stage errors or reads garbage.
+        let arg = try need(args, 0, "wValue|all").lowercased()
+        let targets: [PhysicalOutput]
+        if arg == "all" {
+            targets = dev.profile.physicalOutputs
+        } else {
+            guard let wv = UInt16(arg),
+                  let out = dev.profile.physicalOutputs.first(where: { $0.wValue == wv }) else {
+                throw CLIError.usage("wValue must be one of: " +
+                    dev.profile.physicalOutputs.map { "\($0.wValue)=\($0.displayName)" }.joined(separator: " "))
+            }
+            targets = [out]
+        }
+        print("Probing output gain stages on \(dev.profile.displayName) (stage = wValue+1):\n")
+        for out in targets {
+            let name = out.displayName.padding(toLength: 12, withPad: " ", startingAt: 0)
+            do {
+                let attBefore = try dev.getOutputAttenuation(outputWValue: out.wValue)
+                let muteBefore = try dev.getOutputMute(outputWValue: out.wValue)
+                try dev.setOutputAttenuation(outputWValue: out.wValue, db: -40)
+                usleep(30_000)
+                let attProbe = try dev.getOutputAttenuation(outputWValue: out.wValue)
+                try dev.setOutputMute(outputWValue: out.wValue, muted: !muteBefore)
+                usleep(30_000)
+                let muteProbe = try dev.getOutputMute(outputWValue: out.wValue)
+                // Restore
+                try dev.setOutputAttenuation(outputWValue: out.wValue, db: attBefore)
+                try dev.setOutputMute(outputWValue: out.wValue, muted: muteBefore)
+                let attOK  = abs(attProbe - (-40)) < 1.0
+                let muteOK = muteProbe != muteBefore
+                let functional = dev.profile.hasGainStage(wValue: out.wValue)
+                let verdict = (attOK && muteOK)
+                    ? (functional ? "✓ PASS" : "✓ stores (NOT in audio path)")
+                    : "✗ FAIL"
+                print("  \(name) wValue=\(String(format: "%2d", out.wValue))  " +
+                      "att: \(String(format: "%6.1f", attBefore)) → \(String(format: "%6.1f", attProbe)) dB " +
+                      "(\(attOK ? "ok" : "NO"))  mute toggle: \(muteOK ? "ok" : "NO")   \(verdict)")
+            } catch {
+                print("  \(name) wValue=\(String(format: "%2d", out.wValue))  ERROR: \(error)")
+            }
+        }
+        print("""
+
+        PASS = addressable, functional gain stage.
+        'stores' = the stage accepts and reads back values but is not in the
+        audio path (digital outputs are fixed-level — confirmed on 18i20
+        hardware and matching MixControl's FFMonitor<N> sizes).
+        """)
 
     case "save":
         try dev.saveSettingsToHardware()

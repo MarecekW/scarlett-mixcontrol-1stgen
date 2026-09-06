@@ -71,6 +71,27 @@ public struct DeviceProfile: Sendable, Equatable {
     /// Whether the device has a Monitor Mono fold-down switch (currently
     /// disabled in the UI for all models pending an unsolved crash).
     public let hasMonitorMono: Bool
+
+    /// Number of leading physical outputs (by wValue) with a *functional*
+    /// post-routing gain/mute stage.  Every output's stage is addressable
+    /// (stage = wValue + 1) and reads back what was written, but on digital
+    /// outputs (S/PDIF, ADAT) the value is stored without entering the audio
+    /// path — confirmed on 18i20 hardware (ADAT fader/mute inaudible) and
+    /// matching MixControl's own per-model FFMonitor<N> template sizes:
+    /// USB14Tracker(8i6)=4, Saffire6i6=4, USB26Tracker(18i6)=4,
+    /// USB24Tracker(18i8)=6, Saffire18i20=10 — i.e. the analog outputs only.
+    public let controlledOutputCount: Int
+
+    /// True if this output has a functional gain/mute stage (see
+    /// `controlledOutputCount`).
+    public func hasGainStage(wValue: UInt16) -> Bool {
+        wValue < controlledOutputCount
+    }
+
+    /// True when the device has a hardware monitor section the app should
+    /// mirror (front-panel volume knob + DIM/MUTE buttons, readable via
+    /// `getHardwareMonitorControls`).  Only the 18i20 in the 1st-gen family.
+    public var hasHardwareMonitorControls: Bool { productID == 0x800c }
 }
 
 public struct SourceDescriptor: Sendable, Hashable, Identifiable {
@@ -168,7 +189,8 @@ extension DeviceProfile {
         defaultCaptureSources: [.analog1, .analog2, .analog3, .analog4, .spdif1, .spdif2],
         impedanceChannels: [1, 2],
         hiLoChannels: [3, 4],
-        hasMonitorMono: false   // hidden until the disconnect is solved
+        hasMonitorMono: false,   // hidden until the disconnect is solved
+        controlledOutputCount: 4
     )
 
     // ---- Scarlett 18i6 1st gen (USB26Tracker) — EXPERIMENTAL ----------
@@ -232,7 +254,8 @@ extension DeviceProfile {
         ],
         impedanceChannels: [1, 2],  // Inputs 1+2 are combo jacks (mic preamp)
         hiLoChannels: [],           // 18i6 has separate Hi-Z buttons on mics, not Hi/Lo
-        hasMonitorMono: false
+        hasMonitorMono: false,
+        controlledOutputCount: 4
     )
 
     // ---- Scarlett 18i8 1st gen (USB24Tracker) — SUPPORTED ------------
@@ -303,7 +326,8 @@ extension DeviceProfile {
         ],
         impedanceChannels: [1, 2],
         hiLoChannels: [],
-        hasMonitorMono: false
+        hasMonitorMono: false,
+        controlledOutputCount: 6
     )
 
     // ---- Scarlett 6i6 1st gen (Saffire6i6 table) — EXPERIMENTAL -------
@@ -361,10 +385,11 @@ extension DeviceProfile {
         defaultCaptureSources: [.analog1, .analog2, .analog3, .analog4, .spdif1, .spdif2],
         impedanceChannels: [1, 2],  // 2 combo mic/line inputs
         hiLoChannels: [],
-        hasMonitorMono: false
+        hasMonitorMono: false,
+        controlledOutputCount: 4
     )
 
-    // ---- Scarlett 18i20 1st gen (Saffire18i20 table) — EXPERIMENTAL ---
+    // ---- Scarlett 18i20 1st gen (Saffire18i20 table) — VERIFIED --------
     //
     // 8 analog + 2 S/PDIF + 8 ADAT = 18 inputs; 20 DAW playback.  Matrix is
     // 18 × 8.  20 physical outputs: Monitor + 8 line + S/PDIF + 8 ADAT.
@@ -380,7 +405,8 @@ extension DeviceProfile {
         productID: 0x800c,
         internalName: "Saffire18i20",
         displayName: "Scarlett 18i20 (1st gen)",
-        isExperimental: true,
+        isExperimental: false,   // confirmed on hardware: routing, matrix,
+                                 // meters, output stages, hw monitor section
         matrixInputCount: 18,
         mixBusCount: 8,
         sources: [
@@ -439,10 +465,13 @@ extension DeviceProfile {
             .init(wValue: 0x03, displayName: "Line Out 4", pairLabel: "Line 3+4",  isLeft: false),
             .init(wValue: 0x04, displayName: "Line Out 5", pairLabel: "Line 5+6",  isLeft: true),
             .init(wValue: 0x05, displayName: "Line Out 6", pairLabel: "Line 5+6",  isLeft: false),
-            .init(wValue: 0x06, displayName: "Line Out 7", pairLabel: "Line 7+8",  isLeft: true),
-            .init(wValue: 0x07, displayName: "Line Out 8", pairLabel: "Line 7+8",  isLeft: false),
-            .init(wValue: 0x08, displayName: "Line Out 9", pairLabel: "Line 9+10", isLeft: true),
-            .init(wValue: 0x09, displayName: "Line Out 10",pairLabel: "Line 9+10", isLeft: false),
+            // Line 7/8 and 9/10 are mirrored on the front-panel headphone
+            // jacks 1 and 2 — per MixControl's own monitor presets
+            // ("Mid+Phones 1" = outs 7+8, "Mini+Phones 2" = outs 9+10).
+            .init(wValue: 0x06, displayName: "Line Out 7", pairLabel: "Phones 1",  isLeft: true),
+            .init(wValue: 0x07, displayName: "Line Out 8", pairLabel: "Phones 1",  isLeft: false),
+            .init(wValue: 0x08, displayName: "Line Out 9", pairLabel: "Phones 2",  isLeft: true),
+            .init(wValue: 0x09, displayName: "Line Out 10",pairLabel: "Phones 2",  isLeft: false),
             .init(wValue: 0x0a, displayName: "S/PDIF L",   pairLabel: "S/PDIF",    isLeft: true),
             .init(wValue: 0x0b, displayName: "S/PDIF R",   pairLabel: "S/PDIF",    isLeft: false),
             .init(wValue: 0x0c, displayName: "ADAT 1",     pairLabel: "ADAT 1+2",  isLeft: true),
@@ -463,7 +492,8 @@ extension DeviceProfile {
         ],
         impedanceChannels: [],   // 8 mic pres; inst/pad switches unverified
         hiLoChannels: [],
-        hasMonitorMono: false
+        hasMonitorMono: false,
+        controlledOutputCount: 10
     )
 }
 

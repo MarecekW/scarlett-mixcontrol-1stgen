@@ -39,7 +39,9 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
 |     |                                                                                             |
 | --- | ------------------------------------------------------------------------------------------- |
 | 🎛️  | **Full 18 × 6 matrix mixer** with per-cell gain, mute, solo, pan, stereo link               |
-| 🔀  | **Output routing** — Monitor / Phones / S/PDIF can pick any source (DAW, Analog, Mix M1–M6) |
+| 🔀  | **Output routing** — every physical output pair (Monitor, Phones, Line, S/PDIF, ADAT) can pick any source (DAW, Analog, Mix M1–M8) |
+| 🎚️  | **Per-output level strips** — pin any analog output pair as a fader strip; digital outs metered honestly (fixed level) |
+| 🕹️  | **Hardware monitor mirroring** — the 18i20's front-panel volume knob and Dim/Mute buttons reflected live in the app |
 | 🎤  | **USB capture routing** — choose what your DAW sees on each input channel                   |
 | 📌  | **Pinned DAW return strip** — DAW 1/2 back into the matrix with one linked fader            |
 | 🔘  | **Hardware switches** — line/inst impedance, hi/lo gain, clock source, sample rate          |
@@ -104,12 +106,12 @@ For dev iteration without packaging: `swift run scarlett-app`. There's also a `s
 | Scarlett 6i6 _(1st gen)_     | 🟢 &nbsp; Beta — driven; awaiting hardware confirmation |
 | Scarlett 18i6 _(1st gen)_    | 🟢 &nbsp; Beta — driven; awaiting hardware confirmation |
 | **Scarlett 18i8** _(1st gen)_ | ✅ &nbsp; Confirmed on hardware (thanks @Nas3nmann)   |
-| Scarlett 18i20 _(1st gen)_   | 🟢 &nbsp; Beta — driven; awaiting hardware confirmation |
+| **Scarlett 18i20** _(1st gen)_ | ✅ &nbsp; Confirmed on hardware — routing, matrix, meters, output stages, hardware monitor section |
 | Scarlett 16i8 _(1st gen)_    | ⚪ &nbsp; Prototype SKU — no shipping USB ID to detect |
 | Scarlett 2nd / 3rd / 4th gen | ❌ &nbsp; Different protocol — won't work            |
 | Saffire (FireWire) family    | ❌ &nbsp; Different transport — won't work           |
 
-> 🟢 Every shipping 1st-gen USB Scarlett is driven with byte tables extracted from the original MixControl binary. The **8i6** and **18i8** are confirmed on real hardware; the rest are wired up but need an owner to verify. Grab a [pre-release](https://github.com/MarecekW/scarlett-mixcontrol-1stgen/releases) and [open an issue](https://github.com/MarecekW/scarlett-mixcontrol-1stgen/issues) if anything's off.
+> 🟢 Every shipping 1st-gen USB Scarlett is driven with byte tables extracted from the original MixControl binary. The **8i6**, **18i8** and **18i20** are confirmed on real hardware; the rest are wired up but need an owner to verify. Grab a [pre-release](https://github.com/MarecekW/scarlett-mixcontrol-1stgen/releases) and [open an issue](https://github.com/MarecekW/scarlett-mixcontrol-1stgen/issues) if anything's off.
 
 <br/>
 

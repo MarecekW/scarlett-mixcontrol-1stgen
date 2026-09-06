@@ -302,6 +302,22 @@ public func gainBytes(db: Double) -> [UInt8] {
 let muteBytes:   [UInt8] = [0x01, 0x00]
 let unmuteBytes: [UInt8] = [0x00, 0x00]
 
+// MARK: - Hardware monitor section
+
+/// Front-panel monitor section state (18i20: volume knob + DIM/MUTE buttons).
+public struct HardwareMonitorState: Equatable, Sendable {
+    /// Knob position as attenuation, 0 (full) … negative dB.
+    public var potAttenuationDb: Double
+    public var dim: Bool
+    public var mute: Bool
+
+    public init(potAttenuationDb: Double, dim: Bool, mute: Bool) {
+        self.potAttenuationDb = potAttenuationDb
+        self.dim = dim
+        self.mute = mute
+    }
+}
+
 // MARK: - Peak readings
 
 public struct PeakReading {
@@ -404,6 +420,55 @@ extension ScarlettDevice {
             index: 0x0a00,
             data: attenuationBytes(db: db)
         )
+    }
+
+    // ---- Per-output gain stages (addressed by route wValue) ---------------
+    //
+    // The post-routing attenuation/mute stages on wIndex 0x0a00 line up with
+    // the physical-output route numbering as `stage index = wValue + 1`
+    // (stage 0 is the global master).  Verified on the 8i6, where
+    // SignalOut.monitorLeft(1)/monitorRight(2)/phonesLeft(3)/phonesRight(4)
+    // are exactly routes 0..3 shifted by one.  The larger models expose more
+    // routes (the 18i20 has 20); whether every one of them has a real gain
+    // stage behind it is device-dependent — use `scarlett-cli probe-output`
+    // to check a pair on real hardware before trusting it in the UI.
+
+    /// Attenuate one physical output's gain stage (-∞ .. 0 dB), addressed by
+    /// the output's route `wValue` from `DeviceProfile.physicalOutputs`.
+    public func setOutputAttenuation(outputWValue: UInt16, db: Double) throws {
+        guard profile.physicalOutputs.contains(where: { $0.wValue == outputWValue }) else {
+            throw ScarlettError.invalidArgument("output \(outputWValue) is not supported by \(profile.displayName)")
+        }
+        try controlOut(
+            cmd: 0x01,
+            value: 0x0200 + outputWValue + 1,
+            index: 0x0a00,
+            data: attenuationBytes(db: db)
+        )
+    }
+
+    /// Mute/unmute one physical output's gain stage, addressed by route `wValue`.
+    public func setOutputMute(outputWValue: UInt16, muted: Bool) throws {
+        guard profile.physicalOutputs.contains(where: { $0.wValue == outputWValue }) else {
+            throw ScarlettError.invalidArgument("output \(outputWValue) is not supported by \(profile.displayName)")
+        }
+        try controlOut(
+            cmd: 0x01,
+            value: 0x0100 + outputWValue + 1,
+            index: 0x0a00,
+            data: muted ? muteBytes : unmuteBytes
+        )
+    }
+
+    public func getOutputAttenuation(outputWValue: UInt16) throws -> Double {
+        let r = try controlIn(cmd: 0x01, value: 0x0200 + outputWValue + 1, index: 0x0a00, length: 2)
+        let raw = UInt16(r[0]) | (UInt16(r[1]) << 8)
+        return Double(Int16(bitPattern: raw)) / 256.0
+    }
+
+    public func getOutputMute(outputWValue: UInt16) throws -> Bool {
+        let r = try controlIn(cmd: 0x01, value: 0x0100 + outputWValue + 1, index: 0x0a00, length: 2)
+        return r[0] != 0
     }
 
     /// Toggle stereo-to-mono fold-down on each output pair.  When mono is
@@ -588,6 +653,25 @@ extension ScarlettDevice {
         let r = try controlIn(cmd: 0x01, value: 0x0100 + mtx, index: 0x3c00, length: 2)
         // gainBytes packs the dB value as a signed Int8 in the high byte.
         return Double(Int8(bitPattern: r[1]))
+    }
+
+    // ---- Hardware monitor section (18i20) ----------------------------------
+
+    /// Read the front-panel monitor section state (18i20: volume knob + DIM
+    /// and MUTE buttons).  Reverse-engineered from MixControl's
+    /// `MacHWDevice::getMonitorControls` / `updateMonitorControls`:
+    /// bRequest=CS_MEM (0x03), wValue=0x0004, wIndex=0x3c00, 4 bytes —
+    /// byte 0 = knob attenuation in dB (device sends positive, negate),
+    /// byte 2 = MUTE button, byte 3 = DIM button (order verified on real
+    /// 18i20 hardware).  MixControl polled this and pushed changes into
+    /// its UI via setGainFromHW/setDimFromHW/setMuteFromHW.
+    public func getHardwareMonitorControls() throws -> HardwareMonitorState {
+        let r = try controlIn(cmd: 0x03, value: 0x0004, index: 0x3c00, length: 4)
+        return HardwareMonitorState(
+            potAttenuationDb: -Double(r[0]),
+            dim:  r[3] != 0,
+            mute: r[2] != 0
+        )
     }
 
     // ---- Save -------------------------------------------------------------
