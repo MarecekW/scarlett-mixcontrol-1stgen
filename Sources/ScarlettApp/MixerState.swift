@@ -39,11 +39,15 @@ final class MixerState {
     var stereoPairCount: Int { profile.stereoPairCount }
 
     /// Sources shown in matrix-channel pickers for the connected device.
+    /// On devices with the pinned DAW return, DAW 1/2 are left out: picking
+    /// one on a regular strip would steal it from the pinned channels, which
+    /// stay Off afterwards and silently drop playback from every mix.
     var matrixSourceOptions: [SignalSource] {
         var seen = Set<UInt8>()
+        let reserved: Set<SignalSource> = hasPinnedDawReturn ? [.daw1, .daw2] : []
         return profile.matrixChannelSources.compactMap { desc in
             let src = profile.signalSource(fromWireByte: desc.byte)
-            guard seen.insert(src.rawValue).inserted else { return nil }
+            guard !reserved.contains(src), seen.insert(src.rawValue).inserted else { return nil }
             return src
         }
     }
