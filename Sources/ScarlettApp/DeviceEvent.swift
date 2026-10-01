@@ -25,7 +25,7 @@ public struct DeviceEvent: Identifiable, Hashable {
             switch self {
             case .info:    return Theme.textSecondary
             case .warning: return .orange
-            case .error:   return Theme.meterHigh
+            case .error:   return Theme.failure
             }
         }
     }

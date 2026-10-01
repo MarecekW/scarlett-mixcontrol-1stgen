@@ -416,16 +416,6 @@ extension RoutingView {
 struct DeviceView: View {
     @Bindable var state: MixerState
 
-    /// Label for a system-styled `FeedbackButton`.
-    @ViewBuilder
-    private func feedbackLabel(_ phase: FeedbackPhase, idle: String, done: String) -> some View {
-        switch phase {
-        case .idle:   Text(idle)
-        case .done:   Label(done, systemImage: "checkmark").foregroundStyle(Theme.meterLow)
-        case .failed: Label("Failed", systemImage: "xmark").foregroundStyle(Theme.meterHigh)
-        }
-    }
-
     private func compatRow(symbol: String, color: Color, text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: symbol)
@@ -511,12 +501,12 @@ struct DeviceView: View {
                 Panel(title: "Persistence & reset") {
                     HStack(spacing: 10) {
                         FeedbackButton(action: { await state.saveToFlash() }) { phase in
-                            feedbackLabel(phase, idle: "Save to hardware", done: "Saved")
+                            FeedbackLabel(phase: phase, title: "Save to hardware", doneTitle: "Saved")
                         }
                             .help("Writes current state to the device's flash so it survives a power cycle. Flash has finite write cycles; don't call this every change.")
                             .disabled(!state.isConnected)
-                        FeedbackButton(action: { state.userLoadFromDevice(); return true }) { phase in
-                            feedbackLabel(phase, idle: "Load from device", done: "Reloaded")
+                        FeedbackButton(action: { state.userLoadFromDevice() }) { phase in
+                            FeedbackLabel(phase: phase, title: "Load from device", doneTitle: "Reloaded")
                         }
                             .help("Re-read the matrix state (sources + cell gains) from the device. Useful if another tool changed the device behind the app's back, or after a power cycle. Routing isn't refreshed — the firmware doesn't report routes back.")
                             .disabled(!state.isConnected)
@@ -682,19 +672,10 @@ struct ConnectionOverlayCard: View {
                     Button {
                         state.attemptConnect()
                     } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("Retry now")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Theme.muteActive)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                        Pill(icon: "arrow.clockwise", title: "Retry now",
+                             fill: Theme.muteActive, foreground: .white, size: .card)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pill)
                 }
                 .padding(.top, 4)
             }
@@ -773,27 +754,15 @@ struct FirstLaunchCard: View {
                 Button {
                     state.userCompleteFirstLaunch(applyDefaults: false)
                 } label: {
-                    Text("Keep existing")
-                        .font(.system(size: 12, weight: .semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Theme.panelRaised)
-                        .foregroundStyle(Theme.textPrimary)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                    Pill(title: "Keep existing", foreground: Theme.textPrimary, size: .card)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pill)
                 Button {
                     state.userCompleteFirstLaunch(applyDefaults: true)
                 } label: {
-                    Text("Apply defaults")
-                        .font(.system(size: 12, weight: .semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                    Pill(title: "Apply defaults", fill: Theme.muteActive, foreground: .white, size: .card)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pill)
             }
             .padding(.top, 4)
         }
@@ -802,7 +771,7 @@ struct FirstLaunchCard: View {
         .background(Theme.panel)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.blue.opacity(0.45), lineWidth: 1)
+                .strokeBorder(Theme.muteActive.opacity(0.45), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .shadow(color: .black.opacity(0.45), radius: 24, y: 4)

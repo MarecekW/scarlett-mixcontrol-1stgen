@@ -75,6 +75,13 @@ enum Theme {
     static let meterLow = Color(red: 0.30, green: 0.80, blue: 0.40)
     static let meterMid = Color(red: 0.95, green: 0.80, blue: 0.20)
     static let meterHigh = Color(red: 0.95, green: 0.30, blue: 0.25)
+
+    /// Status colours for confirmations ("Saved"), failures and destructive
+    /// actions — the meter's green and red.
+    static let success = meterLow
+    static let failure = meterHigh
+    /// Opacity of a status colour used as a pill fill behind status text.
+    static let statusFillOpacity: Double = 0.25
 }
 
 extension SignalSource {
@@ -92,88 +99,6 @@ extension SignalSource {
             return Theme.accentAnalog
         case .off:
             return Theme.accentOther
-        }
-    }
-}
-
-/// A drop-in replacement for SwiftUI's `Picker(.menu)` that always renders
-/// with theme-controlled colors. `Picker(.menu)` on macOS is backed by
-/// `NSPopUpButton` and stubbornly ignores `.foregroundStyle` /
-/// `NSAppearance` overrides in some configurations, leaving us with dark
-/// text on dark panels. `Menu` gives us full label control.
-struct ThemedMenuPicker<T: Hashable & Identifiable>: View {
-    let options: [T]
-    let displayName: (T) -> String
-    @Binding var selection: T
-    var width: CGFloat? = nil
-    var horizontalPadding: CGFloat = 6
-    var verticalPadding: CGFloat = 3
-    @Environment(\.isEnabled) private var isEnabled
-
-    var body: some View {
-        Menu {
-            ForEach(options) { item in
-                Button(displayName(item)) { selection = item }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(displayName(selection))
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 2)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 7, weight: .semibold))
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            .padding(.horizontal, horizontalPadding)
-            .padding(.vertical, verticalPadding)
-            .frame(width: width)
-            .background(Theme.panelRaised)
-            .clipShape(RoundedRectangle(cornerRadius: 3))
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize(horizontal: width == nil, vertical: true)
-        .opacity(isEnabled ? 1.0 : 0.4)
-    }
-}
-
-/// Outcome a `FeedbackButton` shows after its action runs.
-enum FeedbackPhase: CaseIterable {
-    case idle, done, failed
-}
-
-/// A button that briefly swaps its label for a confirmation ("Saved",
-/// "Cleared") or a failure, then reverts.  Every phase's label is laid out
-/// at once and only the current one is visible, so the button keeps the
-/// width of its widest label and nothing around it shifts.
-struct FeedbackButton<Label: View>: View {
-    /// Returns true on success.  Async so a USB write can report back.
-    let action: () async -> Bool
-    @ViewBuilder let label: (FeedbackPhase) -> Label
-    @State private var phase: FeedbackPhase = .idle
-    /// Bumped per click so an older click's timer can't reset a newer one.
-    @State private var clickID = 0
-
-    var body: some View {
-        Button {
-            clickID += 1
-            let id = clickID
-            Task {
-                let ok = await action()
-                phase = ok ? .done : .failed
-                try? await Task.sleep(for: .seconds(1.5))
-                if clickID == id { phase = .idle }
-            }
-        } label: {
-            ZStack {
-                ForEach(FeedbackPhase.allCases, id: \.self) { p in
-                    label(p).opacity(p == phase ? 1 : 0)
-                }
-            }
-            .animation(.easeOut(duration: 0.15), value: phase)
         }
     }
 }

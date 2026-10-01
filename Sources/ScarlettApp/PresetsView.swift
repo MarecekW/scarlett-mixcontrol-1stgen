@@ -111,21 +111,11 @@ struct PresetsView: View {
             Button {
                 savePreset()
             } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "bookmark.fill")
-                        .font(.system(size: 11))
-                    Text("Save")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Theme.muteActive)
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                Pill(icon: "bookmark.fill", title: "Save",
+                     fill: Theme.muteActive, foreground: .white, size: .row)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pill)
             .disabled(newPresetName.trimmingCharacters(in: .whitespaces).isEmpty)
-            .opacity(newPresetName.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1.0)
 
             Spacer(minLength: 0)
         }
@@ -185,26 +175,8 @@ struct PresetsView: View {
                 }
             Text(taken ? "Another preset for this device already uses that name" : "Enter to rename · Esc to cancel")
                 .font(.caption2)
-                .foregroundStyle(taken ? Theme.meterHigh : Theme.textSecondary)
+                .foregroundStyle(taken ? Theme.failure : Theme.textSecondary)
         }
-    }
-
-    private func loadPill(icon: String?, label: String,
-                          background: Color, foreground: Color) -> some View {
-        HStack(spacing: 4) {
-            if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: 9, weight: .bold))
-            }
-            Text(label)
-                .font(.system(size: 11, weight: .semibold))
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
-        .frame(maxWidth: .infinity)
-        .background(background)
-        .foregroundStyle(foreground)
-        .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 
     private func presetRow(_ preset: ScarlettPreset) -> some View {
@@ -232,19 +204,10 @@ struct PresetsView: View {
                         return false
                     }
                 }) { phase in
-                    switch phase {
-                    case .idle:
-                        loadPill(icon: nil, label: "Load",
-                                 background: Self.rowButtonFill, foreground: Theme.textPrimary)
-                    case .done:
-                        loadPill(icon: "checkmark", label: "Loaded",
-                                 background: Theme.meterLow.opacity(0.25), foreground: Theme.meterLow)
-                    case .failed:
-                        loadPill(icon: "xmark", label: "Failed",
-                                 background: Theme.meterHigh.opacity(0.25), foreground: Theme.meterHigh)
-                    }
+                    FeedbackPill(phase: phase, title: "Load", doneTitle: "Loaded",
+                                 fill: Self.rowButtonFill, foreground: Theme.textPrimary, size: .row)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pill)
                 .fixedSize()
 
                 Button {
@@ -254,10 +217,10 @@ struct PresetsView: View {
                         .font(.system(size: 11))
                         .frame(width: 24, height: 22)
                         .background(Self.rowButtonFill)
-                        .foregroundStyle(Theme.meterHigh)
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .foregroundStyle(Theme.failure)
+                        .clipShape(RoundedRectangle(cornerRadius: PillSize.row.cornerRadius))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pill)
                 .help("Delete preset")
                 .accessibilityLabel("Delete preset \(preset.name)")
             }

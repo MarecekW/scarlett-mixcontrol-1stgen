@@ -687,11 +687,15 @@ final class MixerState {
     /// flash and the UI is now out of sync.  Routing GETs always return
     /// 00 00 on the 1st-gen 8i6, so routes themselves aren't refreshed —
     /// only matrix sources / cell gains.
-    func userLoadFromDevice() {
-        guard device != nil else { return }
+    /// Returns false when there's no device to read from.  Individual read
+    /// failures are swallowed by `refreshFromDevice` and not reported here.
+    @discardableResult
+    func userLoadFromDevice() -> Bool {
+        guard device != nil else { return false }
         refreshFromDevice()
         saveMatrix()
         logEvent(.info, "Refresh", "Matrix state reloaded from device")
+        return true
     }
 
     /// Read all controls' current state from the device and update the
