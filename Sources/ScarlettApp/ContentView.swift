@@ -81,11 +81,9 @@ struct ContentView: View {
         state.showFirstLaunchPrompt && state.isConnected
     }
 
-    // The window's title bar shows "Scarlett MixControl" against the dark
-    // window chrome; the sidebar (a lighter panel) needs to be wide enough
-    // to cover the full title so the text doesn't get split across the two
-    // background shades.
-    private var sidebarWidth: CGFloat { sidebarCollapsed ? 56 : 250 }
+    // The window title is hidden (the sidebar header names the app/device),
+    // so the width only has to fit the header and the status footer.
+    private var sidebarWidth: CGFloat { sidebarCollapsed ? 56 : 190 }
 
     // MARK: - Sidebar
 
@@ -113,8 +111,10 @@ struct ContentView: View {
         HStack {
             if !sidebarCollapsed {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(state.isConnected ? state.profile.displayName : "Scarlett MixControl")
+                    Text(state.isConnected ? state.profile.modelName : "Scarlett MixControl")
                         .font(.headline).foregroundStyle(Theme.textPrimary)
+                        // "Scarlett MixControl" only just fits at 190pt.
+                        .lineLimit(1).minimumScaleFactor(0.85)
                     Text("1st Gen").font(.caption).foregroundStyle(Theme.textSecondary)
                 }
                 Spacer(minLength: 0)
@@ -161,7 +161,7 @@ struct ContentView: View {
                     Text("Firmware \(state.firmware)").font(.caption2).foregroundStyle(Theme.textSecondary)
                     Text("Serial \(state.serial)").font(.caption2).foregroundStyle(Theme.textSecondary)
                 }
-                Text("App v\(AppInfo.version)")
+                Text("App \(AppInfo.displayVersion)")
                     .font(.caption2)
                     .foregroundStyle(Theme.textSecondary.opacity(0.7))
                     .padding(.top, 4)
@@ -266,6 +266,10 @@ struct ContentView: View {
 @MainActor
 struct MixerPaneView: View {
     @Bindable var state: MixerState
+    /// Fader column height, sized so the page fits the window (see below).
+    @State private var faderHeight = StripLayout.faderHeight
+    @State private var contentHeight: CGFloat = 0
+    @State private var viewportHeight: CGFloat = 0
 
     var body: some View {
         ConnectionOverlay(state: state) {
@@ -275,9 +279,31 @@ struct MixerPaneView: View {
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                    contentHeight = $0
+                    fitFaders()
+                }
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                viewportHeight = $0
+                fitFaders()
+            }
+            .environment(\.faderHeight, faderHeight)
             .background(Theme.background)
         }
+    }
+
+    /// Give the faders whatever height the window has left over.  Everything
+    /// on the page except the fader columns has a fixed height, so the
+    /// content minus the current fader height is constant and this settles
+    /// after one pass.  Outside `faderHeightRange` the page scrolls (tiny
+    /// window) or keeps spare room (very tall window).
+    private func fitFaders() {
+        guard contentHeight > 0, viewportHeight > 0 else { return }
+        let fixed = contentHeight - faderHeight
+        let range = StripLayout.faderHeightRange
+        let fitted = min(max(viewportHeight - fixed, range.lowerBound), range.upperBound)
+        if abs(fitted - faderHeight) >= 1 { faderHeight = fitted.rounded(.down) }
     }
 }
 
@@ -500,10 +526,14 @@ struct DeviceView: View {
 
                 Panel(title: "Persistence & reset") {
                     HStack(spacing: 10) {
-                        Button("Save to hardware") { state.saveToFlash() }
+                        FeedbackButton(action: { await state.saveToFlash() }) { phase in
+                            FeedbackLabel(phase: phase, title: "Save to hardware", doneTitle: "Saved")
+                        }
                             .help("Writes current state to the device's flash so it survives a power cycle. Flash has finite write cycles; don't call this every change.")
                             .disabled(!state.isConnected)
-                        Button("Load from device") { state.userLoadFromDevice() }
+                        FeedbackButton(action: { state.userLoadFromDevice() }) { phase in
+                            FeedbackLabel(phase: phase, title: "Load from device", doneTitle: "Reloaded")
+                        }
                             .help("Re-read the matrix state (sources + cell gains) from the device. Useful if another tool changed the device behind the app's back, or after a power cycle. Routing isn't refreshed — the firmware doesn't report routes back.")
                             .disabled(!state.isConnected)
                         Button("Reset routing & matrix", role: .destructive) {
@@ -523,7 +553,7 @@ struct DeviceView: View {
                             Text("Scarlett MixControl — Community Edition")
                                 .font(.subheadline.bold())
                                 .foregroundStyle(Theme.textPrimary)
-                            Text("v\(AppInfo.version)")
+                            Text(AppInfo.displayVersion)
                                 .font(.subheadline.monospacedDigit())
                                 .foregroundStyle(Theme.textSecondary)
                         }
@@ -553,7 +583,7 @@ struct DeviceView: View {
                                     : a.displayName < b.displayName
                             }
                             ForEach(devices, id: \.productID) { p in
-                                let name = p.displayName.replacingOccurrences(of: " (1st gen)", with: "")
+                                let name = p.modelName
                                 compatRow(symbol: p.isExperimental ? "circle.dashed" : "checkmark.circle.fill",
                                           color: p.isExperimental ? .orange : .green,
                                           text: p.isExperimental
@@ -581,7 +611,7 @@ struct DeviceView: View {
         // fall back to the 8i6 (the primary target).
         let profile = state.device?.profile ?? .scarlett8i6
         return [
-            .init(label: "Model",        value: profile.displayName),
+            .init(label: "Model",        value: profile.modelName),
             .init(label: "Generation",   value: profile.isSupported
                   ? "1st Gen (supported)"
                   : "1st Gen — detected, not supported in this build"),
@@ -668,19 +698,10 @@ struct ConnectionOverlayCard: View {
                     Button {
                         state.attemptConnect()
                     } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("Retry now")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Theme.muteActive)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                        Pill(icon: "arrow.clockwise", title: "Retry now",
+                             fill: Theme.muteActive, foreground: .white, size: .card)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pill)
                 }
                 .padding(.top, 4)
             }
@@ -746,7 +767,7 @@ struct FirstLaunchCard: View {
                     .font(.title3)            // regular weight — visual contrast with the bold title above
                     .foregroundStyle(Theme.textPrimary)
             }
-            Text("For \(state.profile.displayName)")
+            Text("For \(state.profile.modelName)")
                 .font(.caption)
                 .foregroundStyle(Theme.textSecondary)
             Text("Your Scarlett keeps its routing and mixer state in flash. Keep what's already on the device, or start from a clean default config?")
@@ -759,27 +780,15 @@ struct FirstLaunchCard: View {
                 Button {
                     state.userCompleteFirstLaunch(applyDefaults: false)
                 } label: {
-                    Text("Keep existing")
-                        .font(.system(size: 12, weight: .semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Theme.panelRaised)
-                        .foregroundStyle(Theme.textPrimary)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                    Pill(title: "Keep existing", foreground: Theme.textPrimary, size: .card)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pill)
                 Button {
                     state.userCompleteFirstLaunch(applyDefaults: true)
                 } label: {
-                    Text("Apply defaults")
-                        .font(.system(size: 12, weight: .semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                    Pill(title: "Apply defaults", fill: Theme.muteActive, foreground: .white, size: .card)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pill)
             }
             .padding(.top, 4)
         }
@@ -788,7 +797,7 @@ struct FirstLaunchCard: View {
         .background(Theme.panel)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.blue.opacity(0.45), lineWidth: 1)
+                .strokeBorder(Theme.muteActive.opacity(0.45), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .shadow(color: .black.opacity(0.45), radius: 24, y: 4)

@@ -111,7 +111,7 @@ final class MixerState {
 
     // MARK: - User-controlled values (defaults to "no change")
     //
-    // Attenuation sliders: -60...0 dB range, default 0 = no attenuation.
+    // Attenuation sliders: off (-128 dB) ... 0 dB, default 0 = no attenuation.
     // We start sliders at 0 dB but DO NOT push that value to the device on
     // launch (the user might be running at -20 dB right now and we'd boost
     // them). First user change sends the value.
@@ -195,7 +195,7 @@ final class MixerState {
     // computed on demand by `effectiveGain(...)` from those four fields.
     var mixerSources: [SignalSource] = Array(repeating: .off, count: 18)
     /// One fader value per channel per stereo bus pair (M1+M2, M3+M4, M5+M6).
-    /// Range -60…+6 dB, default 0.
+    /// Range off (-128 dB, `DbAxis.off`) … +6 dB, default 0.
     var mixerLevels: [[Double]] = Array(repeating: Array(repeating: 0, count: 3), count: 18)
     /// One pan position per channel per stereo bus pair. -1 = full left,
     /// 0 = center (no attenuation either side), +1 = full right.
@@ -563,8 +563,12 @@ final class MixerState {
         // Pinned output pairs — restore the user's choice, dropping labels
         // that don't exist on this profile (stale data from another build).
         if let saved = defaults.stringArray(forKey: visibleOutputsKey(for: profile)) {
+            // The 18i8's headphone pairs were once labelled "Phones" and
+            // "Line 5+6"; carry pins saved under the old names across.
+            let renamed: [String: String] = profile == .scarlett18i8
+                ? ["Phones": "Phones 1", "Line 5+6": "Phones 2"] : [:]
             let valid = Set(profile.physicalOutputs.map(\.pairLabel))
-            let filtered = Set(saved).intersection(valid)
+            let filtered = Set(saved.map { renamed[$0] ?? $0 }).intersection(valid)
             if !filtered.isEmpty { visiblePairLabels = filtered }
         }
 
@@ -683,11 +687,15 @@ final class MixerState {
     /// flash and the UI is now out of sync.  Routing GETs always return
     /// 00 00 on the 1st-gen 8i6, so routes themselves aren't refreshed —
     /// only matrix sources / cell gains.
-    func userLoadFromDevice() {
-        guard device != nil else { return }
+    /// Returns false when there's no device to read from.  Individual read
+    /// failures are swallowed by `refreshFromDevice` and not reported here.
+    @discardableResult
+    func userLoadFromDevice() -> Bool {
+        guard device != nil else { return false }
         refreshFromDevice()
         saveMatrix()
         logEvent(.info, "Refresh", "Matrix state reloaded from device")
+        return true
     }
 
     /// Read all controls' current state from the device and update the
@@ -1170,12 +1178,21 @@ final class MixerState {
         return ch % 2 == 0 ? ch + 1 : ch - 1
     }
 
+    /// Linking pans the pair hard L/R on every bus; unlinking centers both
+    /// channels — same as Focusrite MixControl.
     func userToggleLink(channel ch: Int) {
         let left = Self.leftOfPair(ch)
-        if linkedPairs.contains(left) {
-            linkedPairs.remove(left)
-        } else {
+        let linking = !linkedPairs.contains(left)
+        if linking {
             linkedPairs.insert(left)
+        } else {
+            linkedPairs.remove(left)
+        }
+        for pair in 0..<stereoPairCount {
+            mixerPans[left][pair]     = linking ? -1 : 0
+            mixerPans[left + 1][pair] = linking ?  1 : 0
+            pushBusPair(channel: left, pair: pair)
+            pushBusPair(channel: left + 1, pair: pair)
         }
         saveMatrix()
     }
@@ -1195,12 +1212,17 @@ final class MixerState {
     }
 
     /// Set the L↔R pan for one stereo bus pair on one channel. Snaps to
-    /// center when within ±0.04.
+    /// center when within ±0.04.  A linked partner mirrors the pan, so the
+    /// pair's width stays symmetric.
     func userSetMixerPan(channel: Int, pair: Int, pan: Double) {
         guard (0..<18).contains(channel), (0..<stereoPairCount).contains(pair) else { return }
         let snapped = abs(pan) < 0.04 ? 0 : max(-1, min(1, pan))
         mixerPans[channel][pair] = snapped
         pushBusPair(channel: channel, pair: pair)
+        if let partner = linkedPartner(channel) {
+            mixerPans[partner][pair] = -snapped
+            pushBusPair(channel: partner, pair: pair)
+        }
         saveMatrix()
     }
 
@@ -1345,7 +1367,7 @@ final class MixerState {
     }
 
     func userSavePreset(name: String) {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let trimmed = ScarlettPreset.normalizedName(name)
         guard !trimmed.isEmpty else { return }
 
         let snapshot = ScarlettPreset(
@@ -1367,9 +1389,7 @@ final class MixerState {
         )
 
         // Replace any preset with the same name; otherwise append.
-        if let idx = presets.firstIndex(where: {
-            $0.name == trimmed && effectiveProductID(for: $0) == profile.productID
-        }) {
+        if let idx = presetIndex(named: trimmed, productID: profile.productID) {
             presets[idx] = snapshot
         } else {
             presets.append(snapshot)
@@ -1435,6 +1455,35 @@ final class MixerState {
     func userDeletePreset(_ preset: ScarlettPreset) {
         presets.removeAll { $0.id == preset.id }
         savePresets()
+    }
+
+    /// The preset a name belongs to: presets are keyed by name + device,
+    /// which is what Save overwrites by and rename refuses to duplicate.
+    private func presetIndex(named name: String, productID: UInt16?,
+                             excluding excludedID: UUID? = nil) -> Int? {
+        presets.firstIndex {
+            $0.id != excludedID && $0.name == name && effectiveProductID(for: $0) == productID
+        }
+    }
+
+    /// True when another preset for the same device already uses `name`.
+    func presetNameTaken(_ name: String, excluding preset: ScarlettPreset) -> Bool {
+        presetIndex(named: ScarlettPreset.normalizedName(name),
+                    productID: effectiveProductID(for: preset),
+                    excluding: preset.id) != nil
+    }
+
+    /// Rename a saved preset.  Returns false (and changes nothing) if the
+    /// name is empty or already taken by another preset for the same device.
+    @discardableResult
+    func userRenamePreset(_ preset: ScarlettPreset, to name: String) -> Bool {
+        let trimmed = ScarlettPreset.normalizedName(name)
+        guard !trimmed.isEmpty,
+              !presetNameTaken(trimmed, excluding: preset),
+              let idx = presets.firstIndex(where: { $0.id == preset.id }) else { return false }
+        presets[idx].name = trimmed
+        savePresets()
+        return true
     }
 
     /// Build a snapshot of the current state in `ScarlettPreset` form.  The
@@ -1706,8 +1755,26 @@ final class MixerState {
 
     // MARK: - Save
 
-    func saveToFlash() {
-        guard let dev = device else { return }
-        writeAsync { try? dev.saveSettingsToHardware() }
+    /// Write the current state to device flash.  Queued behind any pending
+    /// USB writes so it saves what the UI shows; returns false if the
+    /// transfer failed.
+    func saveToFlash() async -> Bool {
+        guard let dev = device else { return false }
+        let failure: Error? = await withCheckedContinuation { cont in
+            writeAsync {
+                do {
+                    try dev.saveSettingsToHardware()
+                    cont.resume(returning: nil)
+                } catch {
+                    cont.resume(returning: error)
+                }
+            }
+        }
+        if let failure {
+            logEvent(.error, "Flash", "Saving settings to hardware failed: \(failure)")
+            return false
+        }
+        logEvent(.info, "Flash", "Settings saved to hardware")
+        return true
     }
 }

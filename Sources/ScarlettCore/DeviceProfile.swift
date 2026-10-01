@@ -30,8 +30,11 @@ public struct DeviceProfile: Sendable, Equatable {
     /// Internal MixControl identifier ("USB14Tracker" etc.) — handy for
     /// debugging and cross-referencing with the original binary.
     public let internalName: String
-    /// Marketing name shown to users.
-    public let displayName: String
+    /// Marketing model name without the generation ("Scarlett 8i6") — used
+    /// where the UI spells out "1st Gen" separately.
+    public let modelName: String
+    /// Full name shown to users ("Scarlett 8i6 (1st Gen)").
+    public var displayName: String { "\(modelName) (1st Gen)" }
     /// True for everything we've not personally validated on hardware.
     public let isExperimental: Bool
 
@@ -151,7 +154,7 @@ extension DeviceProfile {
     public static let scarlett8i6 = DeviceProfile(
         productID: 0x8002,
         internalName: "USB14Tracker",
-        displayName: "Scarlett 8i6 (1st gen)",
+        modelName: "Scarlett 8i6",
         isExperimental: false,
         matrixInputCount: 18,
         mixBusCount: 6,
@@ -200,7 +203,7 @@ extension DeviceProfile {
     public static let scarlett18i6 = DeviceProfile(
         productID: 0x8004,
         internalName: "USB26Tracker",
-        displayName: "Scarlett 18i6 (1st gen)",
+        modelName: "Scarlett 18i6",
         isExperimental: true,
         matrixInputCount: 18,
         mixBusCount: 6,
@@ -262,11 +265,14 @@ extension DeviceProfile {
     //
     // 8 analog + 2 S/PDIF + 8 ADAT + 8 DAW.  Matrix is 18 × 8.
     // Wire bytes verified against Linux `s18i8_info` in mixer_scarlett.c.
-    // 8 routable physical outputs (Monitor + Phones + Line 5/6 + S/PDIF).
+    // 8 routable physical outputs (Monitor + Phones 1 + Phones 2 + S/PDIF).
+    // Outputs 3/4 and 5/6 are the two front headphone jacks (confirmed on
+    // hardware by an 18i8 owner).  Pair labels keep the "Phones" prefix that
+    // the factory reset looks for.
     public static let scarlett18i8 = DeviceProfile(
         productID: 0x8014,
         internalName: "USB24Tracker",
-        displayName: "Scarlett 18i8 (1st gen)",
+        modelName: "Scarlett 18i8",
         isExperimental: false,
         matrixInputCount: 18,
         mixBusCount: 8,
@@ -310,10 +316,10 @@ extension DeviceProfile {
         physicalOutputs: [
             .init(wValue: 0, displayName: "Monitor L",   pairLabel: "Monitor",  isLeft: true),
             .init(wValue: 1, displayName: "Monitor R",   pairLabel: "Monitor",  isLeft: false),
-            .init(wValue: 2, displayName: "Phones L",    pairLabel: "Phones",   isLeft: true),
-            .init(wValue: 3, displayName: "Phones R",    pairLabel: "Phones",   isLeft: false),
-            .init(wValue: 4, displayName: "Line Out 5",  pairLabel: "Line 5+6", isLeft: true),
-            .init(wValue: 5, displayName: "Line Out 6",  pairLabel: "Line 5+6", isLeft: false),
+            .init(wValue: 2, displayName: "Phones 1 L",  pairLabel: "Phones 1", isLeft: true),
+            .init(wValue: 3, displayName: "Phones 1 R",  pairLabel: "Phones 1", isLeft: false),
+            .init(wValue: 4, displayName: "Phones 2 L",  pairLabel: "Phones 2", isLeft: true),
+            .init(wValue: 5, displayName: "Phones 2 R",  pairLabel: "Phones 2", isLeft: false),
             .init(wValue: 6, displayName: "S/PDIF L",    pairLabel: "S/PDIF",   isLeft: true),
             .init(wValue: 7, displayName: "S/PDIF R",    pairLabel: "S/PDIF",   isLeft: false),
         ],
@@ -345,7 +351,7 @@ extension DeviceProfile {
     public static let scarlett6i6 = DeviceProfile(
         productID: 0x8012,
         internalName: "Saffire6i6",
-        displayName: "Scarlett 6i6 (1st gen)",
+        modelName: "Scarlett 6i6",
         isExperimental: true,
         matrixInputCount: 18,
         mixBusCount: 8,
@@ -413,7 +419,7 @@ extension DeviceProfile {
     public static let scarlett18i20 = DeviceProfile(
         productID: 0x800c,
         internalName: "Saffire18i20",
-        displayName: "Scarlett 18i20 (1st gen)",
+        modelName: "Scarlett 18i20",
         isExperimental: false,   // confirmed on hardware: routing, matrix,
                                  // meters, output stages, hw monitor section
         matrixInputCount: 18,

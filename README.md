@@ -149,7 +149,7 @@ For full deep-dive, read the commit history — `d175367` (the matrix-mixer brea
 
 ## 🤝 Contributing
 
-Every shipping 1st-gen USB Scarlett (8i6, 18i6, 18i8, 18i20, 6i6) now has a `DeviceProfile` with byte tables extracted from MixControl's binary, and the app will drive all of them. The remaining open item is **hardware validation** — only the 8i6 has been confirmed on a real unit. If you own one of the others:
+Every shipping 1st-gen USB Scarlett (8i6, 18i6, 18i8, 18i20, 6i6) now has a `DeviceProfile` with byte tables extracted from MixControl's binary, and the app will drive all of them. The remaining open item is **hardware validation** — the 8i6, 18i8 and 18i20 are confirmed on real units; the 6i6 and 18i6 aren't yet. If you own one of those:
 
 1. Grab a [pre-release](https://github.com/MarecekW/scarlett-mixcontrol-1stgen/releases) and connect your device.
 2. Check that inputs/outputs are labelled correctly, faders move the right channels, and meters track the right signals.

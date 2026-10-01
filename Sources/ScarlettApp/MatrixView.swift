@@ -55,24 +55,23 @@ struct MatrixMixerView: View {
                 .contextMenu { copyMixMenuItems(targetBus: bus) }
             }
             Spacer()
-            actionButton(icon: "arrow.counterclockwise", label: "Clear peaks") {
-                state.clearMaxPeaks()
+            FeedbackButton(action: { state.clearMaxPeaks(); return true }) { phase in
+                FeedbackPill(phase: phase, icon: "arrow.counterclockwise",
+                             title: "Clear peaks", doneTitle: "Cleared")
             }
+            .buttonStyle(.pill)
+            .fixedSize()
             .help("Reset the red max-peak tick on every strip.")
 
-            actionButton(
-                icon: state.masterMuted ? "speaker.slash.fill" : "speaker.wave.2",
-                label: state.masterMuted ? "Master muted" : "Mute all",
-                active: state.masterMuted,
-                activeColor: Theme.muteActive
-            ) {
-                state.userSetMasterMute(!state.masterMuted)
-            }
+            masterMuteButton
             .help("Mute every output bus on the device.")
 
-            actionButton(icon: "internaldrive", label: "Save to hardware") {
-                state.saveToFlash()
+            FeedbackButton(action: { await state.saveToFlash() }) { phase in
+                FeedbackPill(phase: phase, icon: "internaldrive",
+                             title: "Save to hardware", doneTitle: "Saved")
             }
+            .buttonStyle(.pill)
+            .fixedSize()
             .disabled(!state.isConnected)
             .help("Persist current settings to device flash so they survive a power cycle.")
 
@@ -93,19 +92,14 @@ struct MatrixMixerView: View {
                 }
             }
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "rectangle.split.3x1")
-                    .font(.system(size: 10, weight: .semibold))
-                Text("Outputs")
-                    .font(.system(size: 11, weight: .semibold))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Theme.panelRaised)
-            .foregroundStyle(Theme.textSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+            // The chevron marks this as a menu rather than an action.
+            Pill(icon: "rectangle.split.3x1", title: "Outputs", trailingIcon: "chevron.down")
         }
-        .menuStyle(.borderlessButton)
+        // A `.borderlessButton` menu doesn't draw the label's background
+        // (`ThemedMenuPicker` relies on that for its flat look); a
+        // button-style menu draws the pill as-is.
+        .menuStyle(.button)
+        .buttonStyle(.pill)
         .menuIndicator(.hidden)
         .fixedSize()
     }
@@ -125,25 +119,44 @@ struct MatrixMixerView: View {
         }
     }
 
-    private func actionButton(
-        icon: String, label: String,
-        active: Bool = false, activeColor: Color = Theme.muteActive,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.system(size: 10, weight: .semibold))
-                Text(label)
-                    .font(.system(size: 11, weight: .semibold))
+    /// Toggles the master mute.  The label morphs between "Mute all" and
+    /// "Master muted".  The toggle runs inside `withAnimation` so the whole
+    /// toolbar re-lays out in step (width grows, neighbours slide); the icon
+    /// rides the leading edge and crossfades in place, and the two labels
+    /// are separate views that crossfade.
+    private var masterMuteButton: some View {
+        let muted = state.masterMuted
+        return Button {
+            withAnimation(.snappy(duration: 0.25)) {
+                state.userSetMasterMute(!muted)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(active ? activeColor : Theme.panelRaised)
-            .foregroundStyle(active ? .white : Theme.textSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+        } label: {
+            HStack(spacing: 5) {
+                // One fixed slot that travels with the button's leading edge;
+                // the two icons crossfade inside it.
+                ZStack {
+                    Image(systemName: "speaker.wave.2").opacity(muted ? 0 : 1)
+                    Image(systemName: "speaker.slash.fill").opacity(muted ? 1 : 0)
+                }
+                .font(PillSize.toolbar.iconFont)
+                .frame(width: 14)
+                Group {
+                    if muted {
+                        Text("Master muted")
+                    } else {
+                        Text("Mute all")
+                    }
+                }
+                .font(PillSize.toolbar.titleFont)
+                .lineLimit(1)
+                .transition(.opacity)
+            }
+            .pillChrome(.toolbar,
+                        fill: muted ? Theme.muteActive : Theme.panelRaised,
+                        foreground: muted ? .white : Theme.textSecondary)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pill)
+        .fixedSize()
     }
 
     private var strips: some View {
@@ -154,7 +167,7 @@ struct MatrixMixerView: View {
                         ChannelStrip(channel: ch, state: state)
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, StripLayout.pinnedOutset)
             }
             if state.hasPinnedDawReturn {
                 PinnedDawStrip(state: state)

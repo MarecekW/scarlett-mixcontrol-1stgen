@@ -3,10 +3,14 @@ import ScarlettCore
 
 enum AppInfo {
     /// Read from the bundle's `CFBundleShortVersionString` (set by
-    /// `scripts/make-app.sh`, which CI overrides with the release tag) so the
-    /// displayed version can't drift from the actual release. Falls back to a
-    /// dev string when run without a bundle (e.g. `swift run`).
-    static let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0-dev"
+    /// `scripts/make-app.sh` from the git tag) so the displayed version can't
+    /// drift from the actual release. Falls back to "dev" when run without a
+    /// bundle (e.g. `swift run`).
+    static let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+    /// `version` for display: "v0.2.1", but plain "dev" rather than "vdev".
+    static var displayVersion: String {
+        version.first?.isNumber == true ? "v\(version)" : version
+    }
 }
 
 /// Pixel-exact section heights shared by every strip in the mixer (channel,
@@ -18,11 +22,29 @@ enum StripLayout {
     static let headerHeight:        CGFloat = 50
     static let switchRowHeight:     CGFloat = 22
     static let panRowHeight:        CGFloat = 30
+    /// Fader / meter column height: fills the mixer page's spare height
+    /// (see `MixerPaneView`) within these bounds; `faderHeight` is the
+    /// default before the page is measured.
     static let faderHeight:         CGFloat = 220
-    static let peakReadoutHeight:   CGFloat = 28
+    static let faderHeightRange:    ClosedRange<CGFloat> = 180...420
+    static let peakReadoutHeight:   CGFloat = 18
     /// Bottom controls = single 22-pt row, contents centered.
     static let controlsHeight:      CGFloat = 22
     static let vSpacing:            CGFloat = 6
+    /// Padding inside a strip card, above and below its sections.
+    static let cardPaddingV:        CGFloat = 10
+    /// How much taller the pinned DAW / output cards are than the channel
+    /// cards at top and bottom, so they read as fixed outputs.  Channel
+    /// strips sit this far in from the row's edges, which also keeps the
+    /// scroll view from clipping their border, so every strip's sections
+    /// (and 0 dB line) stay level.
+    static let pinnedOutset:        CGFloat = 6
+}
+
+extension EnvironmentValues {
+    /// Height of every strip's fader / meter column, set once for the whole
+    /// mixer so all strips match.
+    @Entry var faderHeight: CGFloat = StripLayout.faderHeight
 }
 
 // Centralised palette to keep the Control-2-style dark look consistent.
@@ -66,11 +88,20 @@ enum Theme {
     static let faderKnobShadow = Color.black.opacity(0.5)
     static let faderTrack = Color(white: 0.06)
     static let faderTrackFill = Color(white: 0.32)
+    /// Background of numeric readout fields (fader level, max peak).
+    static let readoutField = Color(white: 0.11)
 
     /// Meter gradient stops.
     static let meterLow = Color(red: 0.30, green: 0.80, blue: 0.40)
     static let meterMid = Color(red: 0.95, green: 0.80, blue: 0.20)
     static let meterHigh = Color(red: 0.95, green: 0.30, blue: 0.25)
+
+    /// Status colours for confirmations ("Saved"), failures and destructive
+    /// actions — the meter's green and red.
+    static let success = meterLow
+    static let failure = meterHigh
+    /// Opacity of a status colour used as a pill fill behind status text.
+    static let statusFillOpacity: Double = 0.25
 }
 
 extension SignalSource {
@@ -89,49 +120,5 @@ extension SignalSource {
         case .off:
             return Theme.accentOther
         }
-    }
-}
-
-/// A drop-in replacement for SwiftUI's `Picker(.menu)` that always renders
-/// with theme-controlled colors. `Picker(.menu)` on macOS is backed by
-/// `NSPopUpButton` and stubbornly ignores `.foregroundStyle` /
-/// `NSAppearance` overrides in some configurations, leaving us with dark
-/// text on dark panels. `Menu` gives us full label control.
-struct ThemedMenuPicker<T: Hashable & Identifiable>: View {
-    let options: [T]
-    let displayName: (T) -> String
-    @Binding var selection: T
-    var width: CGFloat? = nil
-    var horizontalPadding: CGFloat = 6
-    var verticalPadding: CGFloat = 3
-    @Environment(\.isEnabled) private var isEnabled
-
-    var body: some View {
-        Menu {
-            ForEach(options) { item in
-                Button(displayName(item)) { selection = item }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(displayName(selection))
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 2)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 7, weight: .semibold))
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            .padding(.horizontal, horizontalPadding)
-            .padding(.vertical, verticalPadding)
-            .frame(width: width)
-            .background(Theme.panelRaised)
-            .clipShape(RoundedRectangle(cornerRadius: 3))
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize(horizontal: width == nil, vertical: true)
-        .opacity(isEnabled ? 1.0 : 0.4)
     }
 }

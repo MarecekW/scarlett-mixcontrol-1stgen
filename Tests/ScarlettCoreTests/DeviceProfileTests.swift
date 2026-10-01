@@ -148,4 +148,11 @@ final class DeviceProfileTests: XCTestCase {
         XCTAssertTrue(phones.filter { $0.wValue <= 0x07 }.allSatisfy { $0.pairLabel == "Phones 1" })
         XCTAssertTrue(phones.filter { $0.wValue >= 0x08 }.allSatisfy { $0.pairLabel == "Phones 2" })
     }
+
+    func test18i8BothHeadphoneJacksAreFoundByFactoryReset() {
+        let outputs = DeviceProfile.scarlett18i8.physicalOutputs
+        let phones = outputs.filter { $0.pairLabel.hasPrefix("Phones") }
+        XCTAssertEqual(phones.map(\.wValue), [2, 3, 4, 5])
+        XCTAssertEqual(phones.map(\.pairLabel), ["Phones 1", "Phones 1", "Phones 2", "Phones 2"])
+    }
 }
