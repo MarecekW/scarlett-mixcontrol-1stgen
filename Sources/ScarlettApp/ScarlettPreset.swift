@@ -9,6 +9,12 @@ import ScarlettCore
 public struct ScarlettPreset: Codable, Identifiable, Hashable {
     public static let currentSchemaVersion = 2
 
+    /// A typed preset name as stored: surrounding spaces trimmed.  Empty
+    /// means "no name".
+    public static func normalizedName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespaces)
+    }
+
     public let id: UUID
     public var name: String
     public var createdAt: Date

@@ -115,14 +115,14 @@ struct PresetsView: View {
                      fill: Theme.muteActive, foreground: .white, size: .row)
             }
             .buttonStyle(.pill)
-            .disabled(newPresetName.trimmingCharacters(in: .whitespaces).isEmpty)
+            .disabled(ScarlettPreset.normalizedName(newPresetName).isEmpty)
 
             Spacer(minLength: 0)
         }
     }
 
     private func savePreset() {
-        let name = newPresetName.trimmingCharacters(in: .whitespaces)
+        let name = ScarlettPreset.normalizedName(newPresetName)
         guard !name.isEmpty else { return }
         state.userSavePreset(name: name)
         newPresetName = ""
@@ -144,7 +144,7 @@ struct PresetsView: View {
     /// Enter: apply the new name.  An empty or unchanged name just ends the
     /// edit; a name another preset already uses keeps the field open.
     private func submitRename(_ preset: ScarlettPreset) {
-        let name = renameText.trimmingCharacters(in: .whitespaces)
+        let name = ScarlettPreset.normalizedName(renameText)
         if name.isEmpty || name == preset.name || state.userRenamePreset(preset, to: name) {
             renamingID = nil
         } else {

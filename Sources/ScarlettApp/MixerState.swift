@@ -1367,7 +1367,7 @@ final class MixerState {
     }
 
     func userSavePreset(name: String) {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let trimmed = ScarlettPreset.normalizedName(name)
         guard !trimmed.isEmpty else { return }
 
         let snapshot = ScarlettPreset(
@@ -1389,9 +1389,7 @@ final class MixerState {
         )
 
         // Replace any preset with the same name; otherwise append.
-        if let idx = presets.firstIndex(where: {
-            $0.name == trimmed && effectiveProductID(for: $0) == profile.productID
-        }) {
+        if let idx = presetIndex(named: trimmed, productID: profile.productID) {
             presets[idx] = snapshot
         } else {
             presets.append(snapshot)
@@ -1459,21 +1457,27 @@ final class MixerState {
         savePresets()
     }
 
-    /// True when another preset for the same device already uses `name`.
-    /// Mirrors the name+device key `userSavePreset` overwrites by.
-    func presetNameTaken(_ name: String, excluding preset: ScarlettPreset) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
-        let pid = effectiveProductID(for: preset)
-        return presets.contains {
-            $0.id != preset.id && $0.name == trimmed && effectiveProductID(for: $0) == pid
+    /// The preset a name belongs to: presets are keyed by name + device,
+    /// which is what Save overwrites by and rename refuses to duplicate.
+    private func presetIndex(named name: String, productID: UInt16?,
+                             excluding excludedID: UUID? = nil) -> Int? {
+        presets.firstIndex {
+            $0.id != excludedID && $0.name == name && effectiveProductID(for: $0) == productID
         }
+    }
+
+    /// True when another preset for the same device already uses `name`.
+    func presetNameTaken(_ name: String, excluding preset: ScarlettPreset) -> Bool {
+        presetIndex(named: ScarlettPreset.normalizedName(name),
+                    productID: effectiveProductID(for: preset),
+                    excluding: preset.id) != nil
     }
 
     /// Rename a saved preset.  Returns false (and changes nothing) if the
     /// name is empty or already taken by another preset for the same device.
     @discardableResult
     func userRenamePreset(_ preset: ScarlettPreset, to name: String) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let trimmed = ScarlettPreset.normalizedName(name)
         guard !trimmed.isEmpty,
               !presetNameTaken(trimmed, excluding: preset),
               let idx = presets.firstIndex(where: { $0.id == preset.id }) else { return false }
