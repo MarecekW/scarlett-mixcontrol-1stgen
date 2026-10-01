@@ -7,6 +7,11 @@ struct PresetsView: View {
     @State private var newPresetName: String = ""
     @State private var confirmDelete: ScarlettPreset?
     @State private var loadErrorMessage: String?
+    /// Preset whose Load button briefly shows "Loaded" as confirmation.
+    @State private var justLoadedID: UUID?
+
+    /// Row buttons sit on a `panelRaised` row, so they need a lighter fill.
+    private static let rowButtonFill = Color(white: 0.27)
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -30,7 +35,7 @@ struct PresetsView: View {
                 header
                 Panel(title: "Save current state") {
                     saveRow
-                    Text("Captures: output routing, matrix sources / gains / mutes / solos, channel names, stereo-link state, and which bus is in view. Existing presets with the same name are overwritten.")
+                    Text("Captures: output routing, matrix sources / gains / mutes / solos, channel names, stereo-link state, and which bus is in view. Output volumes (Monitor, Phones) are not included, so loading a preset never jumps your listening level. Existing presets with the same name are overwritten.")
                         .font(.caption).foregroundStyle(Theme.textSecondary)
                 }
                 Panel(title: "Saved presets") {
@@ -136,36 +141,51 @@ struct PresetsView: View {
                     .font(.caption2).foregroundStyle(Theme.textSecondary)
             }
             Spacer()
-            Button {
-                do {
-                    try state.userLoadPreset(preset)
-                } catch {
-                    loadErrorMessage = error.localizedDescription
-                }
-            } label: {
-                Text("Load")
-                    .font(.system(size: 11, weight: .semibold))
+            HStack(spacing: 4) {
+                Button {
+                    do {
+                        try state.userLoadPreset(preset)
+                        justLoadedID = preset.id
+                        Task {
+                            try? await Task.sleep(for: .seconds(1.5))
+                            if justLoadedID == preset.id { justLoadedID = nil }
+                        }
+                    } catch {
+                        loadErrorMessage = error.localizedDescription
+                    }
+                } label: {
+                    let loaded = justLoadedID == preset.id
+                    HStack(spacing: 4) {
+                        if loaded {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 9, weight: .bold))
+                        }
+                        Text(loaded ? "Loaded" : "Load")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 5)
-                    .background(Theme.panelRaised)
-                    .foregroundStyle(Theme.textPrimary)
+                    .background(loaded ? Theme.meterLow.opacity(0.25) : Self.rowButtonFill)
+                    .foregroundStyle(loaded ? Theme.meterLow : Theme.textPrimary)
                     .clipShape(RoundedRectangle(cornerRadius: 3))
-            }
-            .buttonStyle(.plain)
+                    .animation(.easeOut(duration: 0.15), value: loaded)
+                }
+                .buttonStyle(.plain)
 
-            Button {
-                confirmDelete = preset
-            } label: {
-                Image(systemName: "trash")
-                    .font(.system(size: 11))
-                    .frame(width: 24, height: 22)
-                    .background(Theme.panelRaised)
-                    .foregroundStyle(Theme.meterHigh)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                Button {
+                    confirmDelete = preset
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11))
+                        .frame(width: 24, height: 22)
+                        .background(Self.rowButtonFill)
+                        .foregroundStyle(Theme.meterHigh)
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                }
+                .buttonStyle(.plain)
+                .help("Delete preset")
+                .accessibilityLabel("Delete preset \(preset.name)")
             }
-            .buttonStyle(.plain)
-            .help("Delete preset")
-            .accessibilityLabel("Delete preset \(preset.name)")
         }
         .padding(10)
         .background(Theme.panelRaised)
