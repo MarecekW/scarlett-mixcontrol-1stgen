@@ -239,6 +239,10 @@ final class MixerState {
         // matrix (100+ control transfers when a device is connected).
         Task { @MainActor in
             attemptConnect()
+            // Started here, not by a view: the app runs with no window open
+            // (menu bar panel only), and the window can be reopened — each
+            // reopen would otherwise start another polling loop.
+            startMeterPolling()
         }
     }
 
@@ -773,7 +777,20 @@ final class MixerState {
 
     // MARK: - Meter polling
 
-    func startMeterPolling() {
+    /// The status item's own window (an `NSStatusBarWindow`, a private
+    /// class).  Matched by name and, should that ever change, by its
+    /// menu-bar-sized height — a false match would keep polling at full
+    /// rate with nothing on screen.
+    private static func isStatusItemWindow(_ win: NSWindow) -> Bool {
+        win.className.contains("StatusBarWindow")
+            || win.frame.height <= NSStatusBar.system.thickness
+    }
+
+    @ObservationIgnored private var meterPollingStarted = false
+
+    private func startMeterPolling() {
+        guard !meterPollingStarted else { return }
+        meterPollingStarted = true
         Task { @MainActor [weak self] in
             var lastTick = Date()
             while !Task.isCancelled {
@@ -787,13 +804,17 @@ final class MixerState {
                     continue
                 }
 
-                // Keep polling whenever the window is visible on screen —
+                // Keep polling whenever a window is visible on screen —
                 // even if our app isn't the frontmost — so a user can park
                 // the meter window behind something else and still watch it.
-                // Only back off when the window is genuinely hidden:
-                // minimised to dock, or the app itself hidden (Cmd+H).
+                // The menu bar panel counts while it's open.  Only back off
+                // when nothing is genuinely showing: window closed or
+                // minimised to dock, or the app itself hidden (Cmd+H).  The
+                // status item's own window is always on screen, so it
+                // doesn't count.
                 let windowVisible = NSApp.windows.contains { win in
-                    win.occlusionState.contains(.visible) && !win.isMiniaturized
+                    win.isVisible && win.occlusionState.contains(.visible) && !win.isMiniaturized
+                        && !Self.isStatusItemWindow(win)
                 }
                 if NSApp.isHidden || !windowVisible {
                     try? await Task.sleep(nanoseconds: 500_000_000)   // 2 Hz

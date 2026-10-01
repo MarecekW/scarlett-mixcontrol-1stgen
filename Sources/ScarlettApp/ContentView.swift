@@ -45,6 +45,7 @@ struct ContentView: View {
     @Bindable var state: MixerState
     @State private var tab: AppTab = .mixer
     @State private var sidebarCollapsed: Bool = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         ZStack {
@@ -71,7 +72,7 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .task { state.startMeterPolling() }
+        .onAppear { AppController.shared.openWindowAction = openWindow }
     }
 
     /// Show the first-launch dialog only when the device is actually

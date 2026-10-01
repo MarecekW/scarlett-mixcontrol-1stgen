@@ -1,9 +1,10 @@
 import SwiftUI
 import AppKit
 
-// Swift Package executables don't have an Info.plist marking them as regular
-// apps; without help the window comes up behind other apps with no Dock icon.
-// Set activation policy after launch via an NSApplicationDelegate.
+// The activation policy is set after launch from the "Show in Dock" setting
+// (see `AppController`): the bundle declares a menu bar app (LSUIElement) so
+// no Dock icon flashes up when the setting is off, and a bare Swift Package
+// executable has no Info.plist at all.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     override init() {
         // Without an .app bundle (we're a Swift Package executable),
@@ -16,31 +17,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
         // Force AppKit-backed controls (Picker .menu = NSPopUpButton, Menu,
         // context menus, etc.) to use dark appearance regardless of the
         // user's system setting. SwiftUI's .preferredColorScheme only
         // affects SwiftUI views, not the embedded AppKit controls.
         NSApp.appearance = NSAppearance(named: .darkAqua)
 
-        // Let the window content extend behind the title bar so the
-        // sidebar's background can run continuously from the very top of
-        // the window down — otherwise there's a strip of plain title-bar
-        // chrome between the sidebar and the rest of the window.
-        DispatchQueue.main.async {
-            for win in NSApp.windows {
-                win.titlebarAppearsTransparent = true
-                // The sidebar header already shows the name; a visible title
-                // would force the sidebar wide enough to sit behind it.
-                win.titleVisibility = .hidden
-                win.styleMask.insert(.fullSizeContentView)
-            }
-        }
+        // Activation policy (Dock icon or menu bar only) and whether the
+        // mixer window stays open at launch.
+        AppController.shared.finishLaunching()
 
         // Runtime icon comes from Contents/Resources/AppIcon.icns (CFBundleIconFile).
         // No NSApp.applicationIconImage override — avoids lockFocus drawing and
         // any Bundle.module access in packaged builds.
+    }
+
+    // The menu bar panel keeps working with the window closed; only Quit
+    // ends the app.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    // Opening the app again (Finder, Spotlight, Dock click) while it runs
+    // brings the mixer back — with no Dock icon there's no other cue.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        AppController.shared.showMainWindow()
+        return false
     }
 }
 
@@ -50,8 +52,9 @@ struct ScarlettApp: App {
     @State private var state = MixerState()
 
     var body: some Scene {
-        Window("Scarlett MixControl", id: "main") {
+        Window("Scarlett MixControl", id: AppController.mainWindowID) {
             ContentView(state: state)
+                .background(MainWindowAccessor())
                 .frame(
                     minWidth: 1100,
                     idealWidth: 1340,
@@ -78,6 +81,15 @@ struct ScarlettApp: App {
                 .keyboardShortcut("o", modifiers: [.command])
             }
         }
+
+        // Always present: with the Dock icon hidden it's the only way back
+        // to the app.
+        MenuBarExtra {
+            MenuBarPanel(state: state)
+        } label: {
+            MenuBarIcon(state: state)
+        }
+        .menuBarExtraStyle(.window)
     }
 }
 
