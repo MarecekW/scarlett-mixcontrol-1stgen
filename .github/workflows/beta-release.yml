@@ -1,13 +1,15 @@
-# Build Scarlett MixControl on macOS and publish a GitHub pre-release (beta)
-# with Scarlett.MixControl.app.zip attached.
+# Build Scarlett MixControl on macOS and publish a GitHub release with
+# Scarlett.MixControl.app.zip attached.  Tags containing "beta" become
+# pre-releases; any other tag becomes a regular release marked Latest.
 #
-# How to get a beta build:
-#   1. GitHub → Actions → "Beta release" → Run workflow (optional custom tag)
-#   2. Or push a tag:  git tag v0.2.0-beta.1 && git push origin v0.2.0-beta.1
+# How to release:
+#   1. Push a tag:  git tag v0.2.0 && git push origin v0.2.0
+#                   (or v0.2.1-beta.1 for a pre-release)
+#   2. Or GitHub → Actions → "Release" → Run workflow (optional custom tag)
 #
-# Download: repo → Releases → latest pre-release → Scarlett.MixControl.app.zip
+# Download: repo → Releases → Scarlett.MixControl.app.zip
 
-name: Beta release
+name: Release
 
 on:
   workflow_dispatch:
@@ -18,8 +20,7 @@ on:
         type: string
   push:
     tags:
-      - "v*-beta*"
-      - "v*beta*"
+      - "v*"
 
 concurrency:
   group: beta-release-${{ github.ref }}
@@ -78,25 +79,27 @@ jobs:
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
           echo "size_kb=$((SIZE / 1024))" >> "$GITHUB_OUTPUT"
 
-      - name: Publish GitHub pre-release
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Scarlett MixControl ${{ steps.version.outputs.tag }}
-          prerelease: true
+          prerelease: ${{ contains(steps.version.outputs.tag, 'beta') }}
+          make_latest: ${{ !contains(steps.version.outputs.tag, 'beta') }}
           generate_release_notes: true
           files: build/Scarlett.MixControl.app.zip
           body: |
-            ## Beta build (macOS 14+)
+            ## Install (macOS 14+)
 
             1. Download **`Scarlett.MixControl.app.zip`** below.
             2. Unzip and drag **Scarlett MixControl.app** to `/Applications`.
-            3. **First launch:** right-click the app → **Open** → confirm (ad-hoc codesign, not notarized).
+            3. **First launch** (ad-hoc codesign, not notarized): open the app, click **Done** on the warning, then
+               **System Settings → Privacy & Security → Open Anyway** and confirm. macOS won't ask again.
                Or: `xattr -dr com.apple.quarantine "/Applications/Scarlett MixControl.app"`
 
-            ### Supported hardware (this branch)
-            - Scarlett **8i6** (1st gen) — previously verified; re-testing after the device-profile refactor
-            - Scarlett **18i8** / **18i6** / **18i20** / **6i6** (1st gen) — beta; byte tables extracted from MixControl, awaiting hardware confirmation
+            ### Supported hardware (1st gen)
+            - **8i6**, **18i8**, **18i20** — confirmed on hardware
+            - **6i6**, **18i6** — driven from MixControl's byte tables; awaiting full hardware confirmation
 
             ### Build info
             | | |

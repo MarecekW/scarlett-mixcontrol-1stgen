@@ -80,7 +80,7 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
 1. Grab `Scarlett.MixControl.app.zip` from the [**latest release**](https://github.com/MarecekW/scarlett-mixcontrol-1stgen/releases/latest).
 2. Unzip and drag `Scarlett MixControl.app` to `/Applications`.
 3. **First launch only** — macOS Gatekeeper will block the app (we use ad-hoc codesigning, not a paid Developer ID). One of these will get past it:
-   - **Right-click** the app → **Open** → confirm the warning dialog.
+   - Open the app, click **Done** on the warning, then go to **System Settings → Privacy & Security** and click **Open Anyway** (macOS won't ask again).
    - Or in Terminal: `xattr -dr com.apple.quarantine "/Applications/Scarlett MixControl.app"`
 
 ### Build from source
