@@ -1170,12 +1170,21 @@ final class MixerState {
         return ch % 2 == 0 ? ch + 1 : ch - 1
     }
 
+    /// Linking pans the pair hard L/R on every bus; unlinking centers both
+    /// channels — same as Focusrite MixControl.
     func userToggleLink(channel ch: Int) {
         let left = Self.leftOfPair(ch)
-        if linkedPairs.contains(left) {
-            linkedPairs.remove(left)
-        } else {
+        let linking = !linkedPairs.contains(left)
+        if linking {
             linkedPairs.insert(left)
+        } else {
+            linkedPairs.remove(left)
+        }
+        for pair in 0..<stereoPairCount {
+            mixerPans[left][pair]     = linking ? -1 : 0
+            mixerPans[left + 1][pair] = linking ?  1 : 0
+            pushBusPair(channel: left, pair: pair)
+            pushBusPair(channel: left + 1, pair: pair)
         }
         saveMatrix()
     }
@@ -1195,12 +1204,17 @@ final class MixerState {
     }
 
     /// Set the L↔R pan for one stereo bus pair on one channel. Snaps to
-    /// center when within ±0.04.
+    /// center when within ±0.04.  A linked partner mirrors the pan, so the
+    /// pair's width stays symmetric.
     func userSetMixerPan(channel: Int, pair: Int, pan: Double) {
         guard (0..<18).contains(channel), (0..<stereoPairCount).contains(pair) else { return }
         let snapped = abs(pan) < 0.04 ? 0 : max(-1, min(1, pan))
         mixerPans[channel][pair] = snapped
         pushBusPair(channel: channel, pair: pair)
+        if let partner = linkedPartner(channel) {
+            mixerPans[partner][pair] = -snapped
+            pushBusPair(channel: partner, pair: pair)
+        }
         saveMatrix()
     }
 
