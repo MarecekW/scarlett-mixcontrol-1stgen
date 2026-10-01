@@ -75,7 +75,39 @@ struct MatrixMixerView: View {
             }
             .disabled(!state.isConnected)
             .help("Persist current settings to device flash so they survive a power cycle.")
+
+            outputsMenu
+                .help("Choose which output pairs are pinned as strips on the right.")
         }
+    }
+
+    /// Menu of output pairs — check to pin a pair's strip in the mixer.
+    private var outputsMenu: some View {
+        Menu {
+            ForEach(state.physicalOutputGroups, id: \.label) { group in
+                Toggle(isOn: Binding(
+                    get: { state.visiblePairLabels.contains(group.label) },
+                    set: { _ in state.userToggleOutputPairVisible(label: group.label) }
+                )) {
+                    Text(group.label)
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "rectangle.split.3x1")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Outputs")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Theme.panelRaised)
+            .foregroundStyle(Theme.textSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     /// Context-menu items for a bus tab — copy this pair's settings to one
@@ -124,7 +156,9 @@ struct MatrixMixerView: View {
                 }
                 .padding(.vertical, 4)
             }
-            PinnedDawStrip(state: state)
+            if state.hasPinnedDawReturn {
+                PinnedDawStrip(state: state)
+            }
             PinnedMasterStrip(state: state)
         }
     }

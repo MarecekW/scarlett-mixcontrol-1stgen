@@ -39,13 +39,15 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
 |     |                                                                                             |
 | --- | ------------------------------------------------------------------------------------------- |
 | 🎛️  | **Full 18 × 6 matrix mixer** with per-cell gain, mute, solo, pan, stereo link               |
-| 🔀  | **Output routing** — Monitor / Phones / S/PDIF can pick any source (DAW, Analog, Mix M1–M6) |
+| 🔀  | **Output routing** — every physical output pair (Monitor, Phones, Line, S/PDIF, ADAT) can pick any source (DAW, Analog, Mix M1–M8) |
+| 🎚️  | **Per-output level strips** — pin any analog output pair as a fader strip; digital outs metered honestly (fixed level) |
+| 🕹️  | **Hardware monitor mirroring** — the 18i20's front-panel volume knob and Dim/Mute buttons reflected live in the app |
 | 🎤  | **USB capture routing** — choose what your DAW sees on each input channel                   |
 | 📌  | **Pinned DAW return strip** — DAW 1/2 back into the matrix with one linked fader            |
 | 🔘  | **Hardware switches** — line/inst impedance, hi/lo gain, clock source, sample rate          |
 | 📊  | **Live peak meters** — all 18 inputs + 6 mix buses + 6 DAW playbacks, with held peaks       |
 | 💾  | **Save to hardware** — persist mixer state to device flash, survives power cycle            |
-| 📁  | **Snapshots** — save / load full configurations as `.8i6` JSON files (⌘S / ⌘O)              |
+| 📁  | **Snapshots** — save / load full configurations as `.scmx` JSON files (⌘S / ⌘O)             |
 | 🔌  | **Connection resilience** — auto-reconnect on USB drops, clear status overlay               |
 
 <br/>
@@ -104,12 +106,12 @@ For dev iteration without packaging: `swift run scarlett-app`. There's also a `s
 | Scarlett 6i6 _(1st gen)_     | 🟢 &nbsp; Beta — driven; awaiting hardware confirmation |
 | Scarlett 18i6 _(1st gen)_    | 🟢 &nbsp; Beta — driven; awaiting hardware confirmation |
 | **Scarlett 18i8** _(1st gen)_ | ✅ &nbsp; Confirmed on hardware (thanks @Nas3nmann)   |
-| Scarlett 18i20 _(1st gen)_   | 🟢 &nbsp; Beta — driven; awaiting hardware confirmation |
+| **Scarlett 18i20** _(1st gen)_ | ✅ &nbsp; Confirmed on hardware — routing, matrix, meters, output stages, hardware monitor section |
 | Scarlett 16i8 _(1st gen)_    | ⚪ &nbsp; Prototype SKU — no shipping USB ID to detect |
 | Scarlett 2nd / 3rd / 4th gen | ❌ &nbsp; Different protocol — won't work            |
 | Saffire (FireWire) family    | ❌ &nbsp; Different transport — won't work           |
 
-> 🟢 Every shipping 1st-gen USB Scarlett is driven with byte tables extracted from the original MixControl binary. The **8i6** and **18i8** are confirmed on real hardware; the rest are wired up but need an owner to verify. Grab a [pre-release](https://github.com/MarecekW/scarlett-mixcontrol-1stgen/releases) and [open an issue](https://github.com/MarecekW/scarlett-mixcontrol-1stgen/issues) if anything's off.
+> 🟢 Every shipping 1st-gen USB Scarlett is driven with byte tables extracted from the original MixControl binary. The **8i6**, **18i8** and **18i20** are confirmed on real hardware; the rest are wired up but need an owner to verify. Grab a [pre-release](https://github.com/MarecekW/scarlett-mixcontrol-1stgen/releases) and [open an issue](https://github.com/MarecekW/scarlett-mixcontrol-1stgen/issues) if anything's off.
 
 <br/>
 
@@ -135,9 +137,9 @@ The protocol itself was reverse-engineered by extracting the per-product signal 
 **Firmware quirks worth knowing:**
 
 - Routing GETs always return `00 00` regardless of what was last set — UserDefaults persistence is the only way to remember routes across launches.
-- Matrix-source assignment silently fails if the source is already wired to another channel — the app does an explicit `.off` disconnect on the previous owner first.
+- The firmware accepts the same source on two matrix channels and silently double-feeds every bus (+6 dB) — contrary to x42's notes; confirmed on the 8i6 and 18i20. The app disconnects any other channel holding a source before assigning it.
 - The `setMonitorMono` USB command crashes the firmware when sent from our process, even with byte-perfect parity to MixControl. Probably an undocumented authorization handshake at startup we haven't identified — the Mn button is hidden until we crack it.
-- The 18i20 has no dedicated "Phones" output, unlike the 8i6/18i6/18i8/6i6. Its front-panel headphone jacks are hardwired analog taps of Line Out 7/8 (Headphone 1) and Line Out 9/10 (Headphone 2) — confirmed by Focusrite's own support docs for the 18i20 across 1st/2nd/3rd gen. Route to those Line outputs in the Routing tab to reach the front jacks; the pinned Phones strip is hidden for this profile rather than pointing at the wrong pair.
+- The 18i20 has no dedicated "Phones" output, unlike the 8i6/18i6/18i8/6i6. Its front-panel headphone jacks are hardwired analog taps of Line Out 7/8 (Headphone 1) and Line Out 9/10 (Headphone 2) — confirmed by Focusrite's own support docs for the 18i20 across 1st/2nd/3rd gen. The app labels them Phones 1 and Phones 2, and factory reset routes the default mix to them instead of to Line 3/4.
 
 For full deep-dive, read the commit history — `d175367` (the matrix-mixer breakthrough) and `1294ff7` (feature parity additions) cover most of the protocol reasoning.
 

@@ -75,6 +75,58 @@ final class DeviceProfileTests: XCTestCase {
         XCTAssertEqual(DeviceProfile.scarlett18i20.supportedWireByte(for: MixBus.daw20), 0x13)
     }
 
+    func testPhysicalOutputsGroupIntoAdjacentPairs() {
+        // The output-strip UI faders and the per-output gain stages
+        // (stage index = wValue + 1) both rely on pairs being two outputs
+        // with adjacent wValues, left first.
+        for profile in DeviceProfile.all {
+            var order: [String] = []
+            var groups: [String: [PhysicalOutput]] = [:]
+            for out in profile.physicalOutputs {
+                if groups[out.pairLabel] == nil { order.append(out.pairLabel) }
+                groups[out.pairLabel, default: []].append(out)
+            }
+            for label in order {
+                let outs = groups[label]!
+                XCTAssertEqual(outs.count, 2,
+                    "\(profile.displayName) pair \(label) must have exactly 2 outputs")
+                XCTAssertTrue(outs[0].isLeft && !outs[1].isLeft,
+                    "\(profile.displayName) pair \(label) must be [left, right]")
+                XCTAssertEqual(outs[1].wValue, outs[0].wValue + 1,
+                    "\(profile.displayName) pair \(label) wValues must be adjacent")
+            }
+        }
+    }
+
+    func testControlledOutputCountsMatchMixControlMonitorSizes() {
+        // From MixControl 1.10.6's FFMonitor<N> template instantiations —
+        // the analog outputs only; digital outs store but don't apply gain.
+        XCTAssertEqual(DeviceProfile.scarlett8i6.controlledOutputCount, 4)
+        XCTAssertEqual(DeviceProfile.scarlett6i6.controlledOutputCount, 4)
+        XCTAssertEqual(DeviceProfile.scarlett18i6.controlledOutputCount, 4)
+        XCTAssertEqual(DeviceProfile.scarlett18i8.controlledOutputCount, 6)
+        XCTAssertEqual(DeviceProfile.scarlett18i20.controlledOutputCount, 10)
+
+        for profile in DeviceProfile.all {
+            XCTAssertLessThanOrEqual(
+                profile.controlledOutputCount, profile.physicalOutputs.count,
+                "\(profile.displayName) can't control more outputs than it has")
+            // Controlled outputs must be a clean prefix of whole pairs so
+            // a pair is never half-controlled.
+            XCTAssertTrue(profile.controlledOutputCount.isMultiple(of: 2),
+                "\(profile.displayName) controlled outputs must cover whole pairs")
+        }
+    }
+
+    func testOutputStageIndexingMatchesLegacySignalOut() {
+        // The generic per-output gain stage addressing (stage = wValue + 1)
+        // must agree with the legacy SignalOut constants verified on the 8i6.
+        XCTAssertEqual(SignalOut.monitorLeft.rawValue,  0 + 1)   // Monitor L = route 0
+        XCTAssertEqual(SignalOut.monitorRight.rawValue, 1 + 1)   // Monitor R = route 1
+        XCTAssertEqual(SignalOut.phonesLeft.rawValue,   2 + 1)   // Phones  L = route 2
+        XCTAssertEqual(SignalOut.phonesRight.rawValue,  3 + 1)   // Phones  R = route 3
+    }
+
     func testExisting8i6CanonicalRawValuesRemainStable() {
         XCTAssertEqual(MixBus.daw1.rawValue, 0x00)
         XCTAssertEqual(MixBus.daw12.rawValue, 0x0b)
@@ -84,22 +136,16 @@ final class DeviceProfileTests: XCTestCase {
         XCTAssertEqual(MixBus.m6.rawValue, 0x19)
     }
 
-    /// The 18i20 has no dedicated "Phones" output — its front headphone
-    /// jacks are hardwired analog taps of Line 7/8 and Line 9/10 (confirmed
-    /// by Focusrite's own support docs for the 18i20 across 1st/2nd/3rd
-    /// gen). Code that keys off `pairLabel == "Phones"` (pinned-strip
-    /// resolution, factory-reset defaults) must not silently invent one by
-    /// falling back to a wrong wValue such as the 8i6's 2/3.
-    func test18i20HasNoDedicatedPhonesOutputAndLabelsTheHeadphoneTaps() {
+    /// The 18i20's front headphone jacks are hardwired analog taps of Line
+    /// 7/8 and Line 9/10 (Focusrite's support docs, 1st/2nd/3rd gen), while
+    /// its wValue 2/3 is a plain rear Line 3/4. Factory reset keys the Phones
+    /// defaults off `pairLabel.hasPrefix("Phones")`, so the labels must point
+    /// at the taps and never at the 8i6-style wValue 2/3.
+    func test18i20PhonesLabelsPointAtTheHeadphoneTaps() {
         let outputs = DeviceProfile.scarlett18i20.physicalOutputs
-        XCTAssertTrue(
-            outputs.filter { $0.pairLabel == "Phones" }.isEmpty,
-            "18i20 should not claim a dedicated Phones output pair"
-        )
-
-        let headphone1 = outputs.filter { $0.wValue == 0x06 || $0.wValue == 0x07 }
-        let headphone2 = outputs.filter { $0.wValue == 0x08 || $0.wValue == 0x09 }
-        XCTAssertTrue(headphone1.allSatisfy { $0.displayName.contains("Headphone 1") })
-        XCTAssertTrue(headphone2.allSatisfy { $0.displayName.contains("Headphone 2") })
+        let phones = outputs.filter { $0.pairLabel.hasPrefix("Phones") }
+        XCTAssertEqual(phones.map(\.wValue), [0x06, 0x07, 0x08, 0x09])
+        XCTAssertTrue(phones.filter { $0.wValue <= 0x07 }.allSatisfy { $0.pairLabel == "Phones 1" })
+        XCTAssertTrue(phones.filter { $0.wValue >= 0x08 }.allSatisfy { $0.pairLabel == "Phones 2" })
     }
 }
