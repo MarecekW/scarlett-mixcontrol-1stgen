@@ -47,8 +47,9 @@ struct MenuBarIcon: View {
 // MARK: - MenuBarPanel
 
 /// Compact controls shown when the menu bar icon is clicked: output volumes
-/// and mutes, preset recall, Mute all.  No meters, so an open panel stays
-/// cheap — the main window is a click away for everything else.
+/// and mutes, preset recall, Mute all.  No meters, so an open panel doesn't
+/// start meter polling — the main window is a click away for everything
+/// else.
 @MainActor
 struct MenuBarPanel: View {
     @Bindable var state: MixerState
@@ -147,7 +148,6 @@ struct MenuBarPanel: View {
             .fixedSize()
 
             Menu {
-                Button("Open Mixer") { AppController.shared.showMainWindow() }
                 Button("Settings…") { AppController.shared.showSettings(openSettings) }
                 Divider()
                 Button("Quit Scarlett MixControl") { AppController.shared.quit() }

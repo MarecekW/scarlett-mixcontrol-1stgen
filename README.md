@@ -78,10 +78,10 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
 
 The app always has an icon in the menu bar. Click it for a compact panel with a volume slider and mute for each output, preset recall, Mute all, and **Open Mixer**. Choose which outputs appear under **Mixer → Outputs → Show in menu bar**. Closing the mixer window keeps the app running there; quit from the panel's ⚙ menu or the sidebar's power button.
 
-In **Settings** (⌘, or the panel's ⚙ menu):
+In **Settings** (the ⚙ in the panel or the sidebar; also ⌘, while the Dock icon is shown):
 
 - **Show in Dock** — turn off to run as a menu-bar-only utility: no Dock icon or ⌘Tab entry, and the app starts quietly in the menu bar. Reopening the app from Finder or Spotlight brings the mixer back.
-- **Launch at login** — start the app when you log in.
+- **Launch at login** — start the app when you log in. With the Dock icon shown the mixer window opens at login too; turn Show in Dock off to start in the menu bar only.
 
 <br/>
 

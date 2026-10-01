@@ -93,6 +93,13 @@ final class AppController {
         }
     }
 
+    /// The mixer window is open, not minimised, and at least partly
+    /// visible — i.e. its meters are worth polling.
+    var isMainWindowOnScreen: Bool {
+        guard let win = mainWindow else { return false }
+        return win.isVisible && !win.isMiniaturized && win.occlusionState.contains(.visible)
+    }
+
     /// Bring the mixer window to the front, reopening it if it was closed.
     func showMainWindow() {
         closeWindowOnAttach = false

@@ -825,6 +825,24 @@ final class MixerState {
 
     @ObservationIgnored private var meterPollingStarted = false
 
+    /// Mirror the hardware monitor section (18i20 front-panel knob +
+    /// DIM/MUTE).  One extra 4-byte transfer — cheap.
+    private func pollHardwareMonitor(_ dev: ScarlettDevice) {
+        guard profile.hasHardwareMonitorControls,
+              let hw = try? dev.getHardwareMonitorControls() else { return }
+        if let old = hwMonitor {
+            if old.dim != hw.dim {
+                logEvent(.info, "Monitor",
+                    hw.dim ? "Hardware Dim engaged" : "Hardware Dim released")
+            }
+            if old.mute != hw.mute {
+                logEvent(.info, "Monitor",
+                    hw.mute ? "Hardware Mute engaged" : "Hardware Mute released")
+            }
+        }
+        if hwMonitor != hw { hwMonitor = hw }
+    }
+
     private func startMeterPolling() {
         guard !meterPollingStarted else { return }
         meterPollingStarted = true
@@ -841,20 +859,23 @@ final class MixerState {
                     continue
                 }
 
-                // Keep polling whenever a window is visible on screen —
-                // even if our app isn't the frontmost — so a user can park
-                // the meter window behind something else and still watch it.
-                // The menu bar panel counts while it's open.  Only back off
-                // when nothing is genuinely showing: window closed or
-                // minimised to dock, or the app itself hidden (Cmd+H).  The
-                // status item's own window is always on screen, so it
-                // doesn't count.
-                let windowVisible = NSApp.windows.contains { win in
-                    win.isVisible && win.occlusionState.contains(.visible) && !win.isMiniaturized
-                        && !Self.isStatusItemWindow(win)
-                }
-                if NSApp.isHidden || !windowVisible {
-                    try? await Task.sleep(nanoseconds: 500_000_000)   // 2 Hz
+                // Poll meters whenever the mixer window is visible on
+                // screen — even if our app isn't the frontmost — so a user
+                // can park it behind something else and still watch it.
+                // Back off when it's closed, minimised to dock, or the app
+                // is hidden (Cmd+H) — the usual state with the app in the
+                // menu bar.  Unplugging is still caught then: the Core Audio
+                // listener drops the connection without any polling.
+                if NSApp.isHidden || !AppController.shared.isMainWindowOnScreen {
+                    // The menu bar panel (or Settings) shows no meters, but
+                    // the panel's 18i20 Monitor fader mirrors the front-panel
+                    // knob, so keep reading that while it's open.
+                    let panelOpen = !NSApp.isHidden && NSApp.windows.contains { win in
+                        win.isVisible && win.occlusionState.contains(.visible)
+                            && !Self.isStatusItemWindow(win)
+                    }
+                    if panelOpen { self.pollHardwareMonitor(dev) }
+                    try? await Task.sleep(nanoseconds: panelOpen ? 250_000_000 : 500_000_000)
                     lastTick = Date()
                     continue
                 }
@@ -931,23 +952,9 @@ final class MixerState {
                     }
                 }
 
-                // Mirror the hardware monitor section (18i20 front-panel
-                // knob + DIM/MUTE) every tick so the fader tracks the knob
-                // smoothly. One extra 4-byte transfer per poll — cheap.
-                if self.profile.hasHardwareMonitorControls,
-                   let hw = try? dev.getHardwareMonitorControls() {
-                    if let old = self.hwMonitor {
-                        if old.dim != hw.dim {
-                            self.logEvent(.info, "Monitor",
-                                hw.dim ? "Hardware Dim engaged" : "Hardware Dim released")
-                        }
-                        if old.mute != hw.mute {
-                            self.logEvent(.info, "Monitor",
-                                hw.mute ? "Hardware Mute engaged" : "Hardware Mute released")
-                        }
-                    }
-                    if self.hwMonitor != hw { self.hwMonitor = hw }
-                }
+                // Mirror the hardware monitor section every tick so the
+                // fader tracks the knob smoothly.
+                self.pollHardwareMonitor(dev)
 
                 // 83 ms ≈ 12 Hz. Each readPeaks() does 3 USB control transfers
                 // (inputs/DAW/mixer) which aren't free on macOS — kernel
