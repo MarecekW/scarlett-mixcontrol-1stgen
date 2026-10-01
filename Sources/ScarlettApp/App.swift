@@ -98,8 +98,10 @@ struct ScarlettApp: App {
     }
 }
 
+// Also used by the Presets page — with the Dock icon hidden there's no
+// File menu.
 @MainActor
-private func exportSnapshot(state: MixerState) {
+func exportSnapshot(state: MixerState) {
     let panel = NSSavePanel()
     // No `allowedContentTypes`: NSSavePanel would otherwise auto-append
     // the canonical extension of the chosen UTType (e.g. ".json"), which
@@ -119,7 +121,7 @@ private func exportSnapshot(state: MixerState) {
 }
 
 @MainActor
-private func importSnapshot(state: MixerState) {
+func importSnapshot(state: MixerState) {
     let panel = NSOpenPanel()
     // No content-type filter — the user might have a `.scmx`, an older
     // `.8i6`, or a `.json` file (all valid; contents are checked at decode time).

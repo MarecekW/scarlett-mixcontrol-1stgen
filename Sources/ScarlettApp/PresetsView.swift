@@ -42,6 +42,22 @@ struct PresetsView: View {
                     Text("Captures: output routing, matrix sources / gains / mutes / solos, channel names, stereo-link state, and which bus is in view. Output volumes (Monitor, Phones) are not included, so loading a preset never jumps your listening level. Existing presets with the same name are overwritten.")
                         .font(.caption).foregroundStyle(Theme.textSecondary)
                 }
+                Panel(title: "Snapshot files") {
+                    HStack(spacing: 8) {
+                        Button { exportSnapshot(state: state) } label: {
+                            Pill(icon: "square.and.arrow.down", title: "Save snapshot…", size: .row)
+                        }
+                        .buttonStyle(.pill)
+                        .fixedSize()
+                        Button { importSnapshot(state: state) } label: {
+                            Pill(icon: "folder", title: "Open snapshot…", size: .row)
+                        }
+                        .buttonStyle(.pill)
+                        .fixedSize()
+                    }
+                    Text("Save the current state to a .scmx file to back it up or move it to another Mac, or open one. Same as File → Save / Open snapshot (⌘S / ⌘O).")
+                        .font(.caption).foregroundStyle(Theme.textSecondary)
+                }
                 Panel(title: "Saved presets") {
                     if state.presets.isEmpty {
                         Text("No presets yet — save one above.")

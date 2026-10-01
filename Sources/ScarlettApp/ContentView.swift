@@ -46,6 +46,7 @@ struct ContentView: View {
     @State private var tab: AppTab = .mixer
     @State private var sidebarCollapsed: Bool = false
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         ZStack {
@@ -152,6 +153,8 @@ struct ContentView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(state.syncLocked ? .green : .orange)
                     .help(state.syncLocked ? "Clock locked" : "No clock lock")
+                appButtons
+                    .padding(.top, 4)
             }
             .frame(maxWidth: .infinity)
             .padding(.bottom, 16)
@@ -166,11 +169,41 @@ struct ContentView: View {
                     .font(.caption2)
                     .foregroundStyle(Theme.textSecondary.opacity(0.7))
                     .padding(.top, 4)
+                appButtons
+                    .padding(.top, 4)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// Settings and Quit.  With the Dock icon hidden the app has no top
+    /// menu bar, so these are the in-window way to reach them.
+    private var appButtons: some View {
+        HStack(spacing: 4) {
+            sidebarIconButton("gearshape", help: "Settings") {
+                AppController.shared.showSettings(openSettings)
+            }
+            sidebarIconButton("power", help: "Quit Scarlett MixControl") {
+                AppController.shared.quit()
+            }
+        }
+    }
+
+    private func sidebarIconButton(_ symbol: String, help: String,
+                                   action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(width: 22, height: 20)
+                .background(Theme.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+        }
+        .buttonStyle(.pill)
+        .help(help)
+        .accessibilityLabel(help)
     }
 
     private var connectionIcon: String {
