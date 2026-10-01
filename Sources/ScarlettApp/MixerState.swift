@@ -128,6 +128,11 @@ final class MixerState {
     /// Monitor — can be hidden; the Outputs menu brings them back.
     var visiblePairLabels: Set<String> = []
 
+    /// Which output pairs (by `PhysicalOutput.pairLabel`) get a slider in
+    /// the menu bar panel.  Persisted per device.  Only pairs with a gain
+    /// stage are eligible — digital outs have no volume to set.
+    var menuBarPairLabels: Set<String> = []
+
     // Input switches — defaults are conservative (line / lo). Not pushed on launch.
     var impedance1: Impedance = .line
     var impedance2: Impedance = .line
@@ -165,6 +170,26 @@ final class MixerState {
     /// profile order.
     var visibleOutputGroups: [(label: String, outputs: [PhysicalOutput])] {
         physicalOutputGroups.filter { visiblePairLabels.contains($0.label) }
+    }
+
+    /// Labels of the output pairs that can have a volume slider in the
+    /// menu bar panel: those with a gain stage (always both sides — gain
+    /// stages cover a run of whole pairs from the first output).
+    private static func menuBarEligibleLabels(for profile: DeviceProfile) -> Set<String> {
+        Set(profile.physicalOutputs
+            .filter { profile.hasGainStage(wValue: $0.wValue) }
+            .map(\.pairLabel))
+    }
+
+    /// Output pairs that can have a volume slider in the menu bar panel.
+    var menuBarEligibleGroups: [(label: String, outputs: [PhysicalOutput])] {
+        let eligible = Self.menuBarEligibleLabels(for: profile)
+        return physicalOutputGroups.filter { eligible.contains($0.label) }
+    }
+
+    /// Output pairs shown in the menu bar panel, in profile order.
+    var menuBarOutputGroups: [(label: String, outputs: [PhysicalOutput])] {
+        menuBarEligibleGroups.filter { menuBarPairLabels.contains($0.label) }
     }
 
     /// The left output wValue of the first (Monitor) pair — the target of Dim.
@@ -430,6 +455,7 @@ final class MixerState {
     private static let monitorMonoKeyPrefix   = "scarlett.monitorMono.v2"
     private static let firstLaunchDoneKeyPrefix = "scarlett.firstLaunchCompleted.v2"
     private static let visibleOutputsKeyPrefix  = "scarlett.visibleOutputs.v1"
+    private static let menuBarOutputsKeyPrefix  = "scarlett.menuBarOutputs.v1"
 
     private func routesKey(for profile: DeviceProfile) -> String {
         "\(Self.routesKeyPrefix).\(profile.productID)"
@@ -451,6 +477,9 @@ final class MixerState {
     }
     private func visibleOutputsKey(for profile: DeviceProfile) -> String {
         "\(Self.visibleOutputsKeyPrefix).\(profile.productID)"
+    }
+    private func menuBarOutputsKey(for profile: DeviceProfile) -> String {
+        "\(Self.menuBarOutputsKeyPrefix).\(profile.productID)"
     }
 
     private func ensureMatrixSizing(for profile: DeviceProfile) {
@@ -481,6 +510,8 @@ final class MixerState {
             order.append(out.pairLabel)
         }
         visiblePairLabels = Set(order.prefix(2))
+        // Menu bar panel: every pair with a volume control, by default.
+        menuBarPairLabels = Self.menuBarEligibleLabels(for: profile)
 
         mixerSources = Array(repeating: .off, count: profile.matrixInputCount)
         mixerLevels = Array(
@@ -574,6 +605,12 @@ final class MixerState {
             let valid = Set(profile.physicalOutputs.map(\.pairLabel))
             let filtered = Set(saved.map { renamed[$0] ?? $0 }).intersection(valid)
             if !filtered.isEmpty { visiblePairLabels = filtered }
+        }
+
+        // Menu bar sliders — unlike the pinned strips, hiding every pair is
+        // a valid choice (the panel still has Mute all and presets).
+        if let saved = defaults.stringArray(forKey: menuBarOutputsKey(for: profile)) {
+            menuBarPairLabels = Set(saved).intersection(menuBarPairLabels)
         }
 
         // Selected bus tab
@@ -958,6 +995,17 @@ final class MixerState {
         }
         UserDefaults.standard.set(Array(visiblePairLabels),
                                   forKey: visibleOutputsKey(for: profile))
+    }
+
+    /// Show/hide an output pair's slider in the menu bar panel.
+    func userToggleMenuBarOutput(label: String) {
+        if menuBarPairLabels.contains(label) {
+            menuBarPairLabels.remove(label)
+        } else {
+            menuBarPairLabels.insert(label)
+        }
+        UserDefaults.standard.set(Array(menuBarPairLabels),
+                                  forKey: menuBarOutputsKey(for: profile))
     }
 
     func userSetMasterMute(_ muted: Bool) {

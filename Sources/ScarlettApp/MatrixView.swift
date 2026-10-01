@@ -76,19 +76,34 @@ struct MatrixMixerView: View {
             .help("Persist current settings to device flash so they survive a power cycle.")
 
             outputsMenu
-                .help("Choose which output pairs are pinned as strips on the right.")
+                .help("Choose which output pairs are pinned as strips on the right, and which get a slider in the menu bar panel.")
         }
     }
 
-    /// Menu of output pairs — check to pin a pair's strip in the mixer.
+    /// Menu of output pairs — check to pin a pair's strip in the mixer, or
+    /// to give it a slider in the menu bar panel.
     private var outputsMenu: some View {
         Menu {
-            ForEach(state.physicalOutputGroups, id: \.label) { group in
-                Toggle(isOn: Binding(
-                    get: { state.visiblePairLabels.contains(group.label) },
-                    set: { _ in state.userToggleOutputPairVisible(label: group.label) }
-                )) {
-                    Text(group.label)
+            Section("Show in mixer") {
+                ForEach(state.physicalOutputGroups, id: \.label) { group in
+                    Toggle(isOn: Binding(
+                        get: { state.visiblePairLabels.contains(group.label) },
+                        set: { _ in state.userToggleOutputPairVisible(label: group.label) }
+                    )) {
+                        Text(group.label)
+                    }
+                }
+            }
+            if !state.menuBarEligibleGroups.isEmpty {
+                Section("Show in menu bar") {
+                    ForEach(state.menuBarEligibleGroups, id: \.label) { group in
+                        Toggle(isOn: Binding(
+                            get: { state.menuBarPairLabels.contains(group.label) },
+                            set: { _ in state.userToggleMenuBarOutput(label: group.label) }
+                        )) {
+                            Text(group.label)
+                        }
+                    }
                 }
             }
         } label: {
