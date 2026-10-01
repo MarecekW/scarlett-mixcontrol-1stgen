@@ -416,6 +416,16 @@ extension RoutingView {
 struct DeviceView: View {
     @Bindable var state: MixerState
 
+    /// Label for a system-styled `FeedbackButton`.
+    @ViewBuilder
+    private func feedbackLabel(_ phase: FeedbackPhase, idle: String, done: String) -> some View {
+        switch phase {
+        case .idle:   Text(idle)
+        case .done:   Label(done, systemImage: "checkmark").foregroundStyle(Theme.meterLow)
+        case .failed: Label("Failed", systemImage: "xmark").foregroundStyle(Theme.meterHigh)
+        }
+    }
+
     private func compatRow(symbol: String, color: Color, text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: symbol)
@@ -500,10 +510,14 @@ struct DeviceView: View {
 
                 Panel(title: "Persistence & reset") {
                     HStack(spacing: 10) {
-                        Button("Save to hardware") { state.saveToFlash() }
+                        FeedbackButton(action: { await state.saveToFlash() }) { phase in
+                            feedbackLabel(phase, idle: "Save to hardware", done: "Saved")
+                        }
                             .help("Writes current state to the device's flash so it survives a power cycle. Flash has finite write cycles; don't call this every change.")
                             .disabled(!state.isConnected)
-                        Button("Load from device") { state.userLoadFromDevice() }
+                        FeedbackButton(action: { state.userLoadFromDevice(); return true }) { phase in
+                            feedbackLabel(phase, idle: "Load from device", done: "Reloaded")
+                        }
                             .help("Re-read the matrix state (sources + cell gains) from the device. Useful if another tool changed the device behind the app's back, or after a power cycle. Routing isn't refreshed — the firmware doesn't report routes back.")
                             .disabled(!state.isConnected)
                         Button("Reset routing & matrix", role: .destructive) {

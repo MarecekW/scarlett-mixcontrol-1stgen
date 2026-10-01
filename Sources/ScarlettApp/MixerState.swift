@@ -1747,8 +1747,26 @@ final class MixerState {
 
     // MARK: - Save
 
-    func saveToFlash() {
-        guard let dev = device else { return }
-        writeAsync { try? dev.saveSettingsToHardware() }
+    /// Write the current state to device flash.  Queued behind any pending
+    /// USB writes so it saves what the UI shows; returns false if the
+    /// transfer failed.
+    func saveToFlash() async -> Bool {
+        guard let dev = device else { return false }
+        let failure: Error? = await withCheckedContinuation { cont in
+            writeAsync {
+                do {
+                    try dev.saveSettingsToHardware()
+                    cont.resume(returning: nil)
+                } catch {
+                    cont.resume(returning: error)
+                }
+            }
+        }
+        if let failure {
+            logEvent(.error, "Flash", "Saving settings to hardware failed: \(failure)")
+            return false
+        }
+        logEvent(.info, "Flash", "Settings saved to hardware")
+        return true
     }
 }

@@ -7,8 +7,6 @@ struct PresetsView: View {
     @State private var newPresetName: String = ""
     @State private var confirmDelete: ScarlettPreset?
     @State private var loadErrorMessage: String?
-    /// Preset whose Load button briefly shows "Loaded" as confirmation.
-    @State private var justLoadedID: UUID?
     /// Preset whose name is being edited inline, and the edit buffer.
     @State private var renamingID: UUID?
     @State private var renameText: String = ""
@@ -191,6 +189,24 @@ struct PresetsView: View {
         }
     }
 
+    private func loadPill(icon: String?, label: String,
+                          background: Color, foreground: Color) -> some View {
+        HStack(spacing: 4) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .bold))
+            }
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity)
+        .background(background)
+        .foregroundStyle(foreground)
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+
     private func presetRow(_ preset: ScarlettPreset) -> some View {
         HStack(alignment: .center, spacing: 12) {
             if renamingID == preset.id {
@@ -207,35 +223,29 @@ struct PresetsView: View {
             }
             Spacer()
             HStack(spacing: 4) {
-                Button {
+                FeedbackButton(action: {
                     do {
                         try state.userLoadPreset(preset)
-                        justLoadedID = preset.id
-                        Task {
-                            try? await Task.sleep(for: .seconds(1.5))
-                            if justLoadedID == preset.id { justLoadedID = nil }
-                        }
+                        return true
                     } catch {
                         loadErrorMessage = error.localizedDescription
+                        return false
                     }
-                } label: {
-                    let loaded = justLoadedID == preset.id
-                    HStack(spacing: 4) {
-                        if loaded {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 9, weight: .bold))
-                        }
-                        Text(loaded ? "Loaded" : "Load")
-                            .font(.system(size: 11, weight: .semibold))
+                }) { phase in
+                    switch phase {
+                    case .idle:
+                        loadPill(icon: nil, label: "Load",
+                                 background: Self.rowButtonFill, foreground: Theme.textPrimary)
+                    case .done:
+                        loadPill(icon: "checkmark", label: "Loaded",
+                                 background: Theme.meterLow.opacity(0.25), foreground: Theme.meterLow)
+                    case .failed:
+                        loadPill(icon: "xmark", label: "Failed",
+                                 background: Theme.meterHigh.opacity(0.25), foreground: Theme.meterHigh)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
-                    .background(loaded ? Theme.meterLow.opacity(0.25) : Self.rowButtonFill)
-                    .foregroundStyle(loaded ? Theme.meterLow : Theme.textPrimary)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                    .animation(.easeOut(duration: 0.15), value: loaded)
                 }
                 .buttonStyle(.plain)
+                .fixedSize()
 
                 Button {
                     confirmDelete = preset

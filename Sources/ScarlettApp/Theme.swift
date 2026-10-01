@@ -139,3 +139,41 @@ struct ThemedMenuPicker<T: Hashable & Identifiable>: View {
         .opacity(isEnabled ? 1.0 : 0.4)
     }
 }
+
+/// Outcome a `FeedbackButton` shows after its action runs.
+enum FeedbackPhase: CaseIterable {
+    case idle, done, failed
+}
+
+/// A button that briefly swaps its label for a confirmation ("Saved",
+/// "Cleared") or a failure, then reverts.  Every phase's label is laid out
+/// at once and only the current one is visible, so the button keeps the
+/// width of its widest label and nothing around it shifts.
+struct FeedbackButton<Label: View>: View {
+    /// Returns true on success.  Async so a USB write can report back.
+    let action: () async -> Bool
+    @ViewBuilder let label: (FeedbackPhase) -> Label
+    @State private var phase: FeedbackPhase = .idle
+    /// Bumped per click so an older click's timer can't reset a newer one.
+    @State private var clickID = 0
+
+    var body: some View {
+        Button {
+            clickID += 1
+            let id = clickID
+            Task {
+                let ok = await action()
+                phase = ok ? .done : .failed
+                try? await Task.sleep(for: .seconds(1.5))
+                if clickID == id { phase = .idle }
+            }
+        } label: {
+            ZStack {
+                ForEach(FeedbackPhase.allCases, id: \.self) { p in
+                    label(p).opacity(p == phase ? 1 : 0)
+                }
+            }
+            .animation(.easeOut(duration: 0.15), value: phase)
+        }
+    }
+}
