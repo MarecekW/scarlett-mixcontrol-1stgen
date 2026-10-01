@@ -1068,12 +1068,12 @@ final class MixerState {
 
     func userSetMixerSource(channel: Int, source: SignalSource) {
         guard (0..<18).contains(channel) else { return }
-        // Steal the source from any other channel that holds it.  x42's 18i6
-        // notes say the firmware rejects double-assignment, but the 18i20
-        // demonstrably allows it (leftover flash state had DAW 3 on two
-        // channels at once) — and a duplicate silently double-feeds every
-        // bus, making the visible channel's fader appear dead.  Either way,
-        // disconnecting the previous owner first is correct on all models.
+        // Steal the source from any other channel that holds it.  Contrary to
+        // x42's notes, the firmware accepts double-assignment — confirmed on
+        // the 18i20 (leftover flash state had DAW 3 on two channels) and the
+        // 8i6 (a second DAW 1 channel measured +6 dB on the mix meter).  A
+        // duplicate silently double-feeds every bus, making the visible
+        // channel's fader appear dead.
         if source != .off {
             for ch in 0..<18 where ch != channel && mixerSources[ch] == source {
                 mixerSources[ch] = .off
@@ -1122,11 +1122,8 @@ final class MixerState {
         let l = Self.pinnedDawLeftChannel
         let r = Self.pinnedDawRightChannel
 
-        // Per x42's docs, the device refuses to double-assign a source: if
-        // DAW 1 is already wired to (say) ch 0 from the factory default, a
-        // bare `setMixerSource(14, .daw1)` is silently rejected and ch 14
-        // stays pointed at whatever it was sourced from before.  We have to
-        // disconnect the existing owner with `.off` first.
+        // Claim DAW 1/2, disconnecting any other channel holding them —
+        // the device would otherwise play them twice (see userSetMixerSource).
         assignPinnedSource(channel: l, source: .daw1)
         assignPinnedSource(channel: r, source: .daw2)
 
@@ -1148,7 +1145,7 @@ final class MixerState {
         if mixerSources[target] == desired { return }
 
         // Disconnect any other channel that currently has this source —
-        // otherwise the device won't reassign it to us.
+        // otherwise the device plays it on both channels.
         for ch in 0..<18 where ch != target && mixerSources[ch] == desired {
             userSetMixerSource(channel: ch, source: .off)
         }
@@ -1392,10 +1389,14 @@ final class MixerState {
         }
         saveRoutes()
 
-        // Matrix sources
+        // Matrix sources.  The firmware accepts the same source on two
+        // channels and double-feeds every bus, so drop duplicates from older
+        // presets: the first channel holding a source keeps it.
         if preset.mixerSources.count == 18 {
+            var claimed = Set<SignalSource>()
             for ch in 0..<18 {
-                guard let src = SignalSource(rawValue: preset.mixerSources[ch]) else { continue }
+                guard let saved = SignalSource(rawValue: preset.mixerSources[ch]) else { continue }
+                let src = (saved != .off && !claimed.insert(saved).inserted) ? .off : saved
                 mixerSources[ch] = src
                 writeAsync { try? dev.setMixerSource(channel: ch, source: src) }
             }
@@ -1413,6 +1414,10 @@ final class MixerState {
         }
         if preset.mixerNames.count == 18 { mixerNames = preset.mixerNames }
         linkedPairs = Set(preset.linkedLefts)
+
+        // Re-claim DAW 1/2 for the pinned strip, as on connect — a preset
+        // may have them on regular channels or not at all.
+        ensurePinnedDawChannels()
 
         for ch in 0..<18 {
             for bus in matrixBuses {
