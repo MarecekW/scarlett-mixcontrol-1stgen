@@ -81,11 +81,9 @@ struct ContentView: View {
         state.showFirstLaunchPrompt && state.isConnected
     }
 
-    // The window's title bar shows "Scarlett MixControl" against the dark
-    // window chrome; the sidebar (a lighter panel) needs to be wide enough
-    // to cover the full title so the text doesn't get split across the two
-    // background shades.
-    private var sidebarWidth: CGFloat { sidebarCollapsed ? 56 : 250 }
+    // The window title is hidden (the sidebar header names the app/device),
+    // so the width only has to fit the header and the status footer.
+    private var sidebarWidth: CGFloat { sidebarCollapsed ? 56 : 190 }
 
     // MARK: - Sidebar
 
@@ -115,6 +113,8 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(state.isConnected ? state.profile.modelName : "Scarlett MixControl")
                         .font(.headline).foregroundStyle(Theme.textPrimary)
+                        // "Scarlett MixControl" only just fits at 190pt.
+                        .lineLimit(1).minimumScaleFactor(0.85)
                     Text("1st Gen").font(.caption).foregroundStyle(Theme.textSecondary)
                 }
                 Spacer(minLength: 0)

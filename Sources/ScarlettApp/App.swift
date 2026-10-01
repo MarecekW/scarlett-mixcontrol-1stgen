@@ -31,6 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async {
             for win in NSApp.windows {
                 win.titlebarAppearsTransparent = true
+                // The sidebar header already shows the name; a visible title
+                // would force the sidebar wide enough to sit behind it.
+                win.titleVisibility = .hidden
                 win.styleMask.insert(.fullSizeContentView)
             }
         }
