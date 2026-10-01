@@ -113,7 +113,7 @@ struct ContentView: View {
         HStack {
             if !sidebarCollapsed {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(state.isConnected ? state.profile.displayName : "Scarlett MixControl")
+                    Text(state.isConnected ? state.profile.modelName : "Scarlett MixControl")
                         .font(.headline).foregroundStyle(Theme.textPrimary)
                     Text("1st Gen").font(.caption).foregroundStyle(Theme.textSecondary)
                 }
@@ -553,7 +553,7 @@ struct DeviceView: View {
                                     : a.displayName < b.displayName
                             }
                             ForEach(devices, id: \.productID) { p in
-                                let name = p.displayName.replacingOccurrences(of: " (1st gen)", with: "")
+                                let name = p.modelName
                                 compatRow(symbol: p.isExperimental ? "circle.dashed" : "checkmark.circle.fill",
                                           color: p.isExperimental ? .orange : .green,
                                           text: p.isExperimental
@@ -581,7 +581,7 @@ struct DeviceView: View {
         // fall back to the 8i6 (the primary target).
         let profile = state.device?.profile ?? .scarlett8i6
         return [
-            .init(label: "Model",        value: profile.displayName),
+            .init(label: "Model",        value: profile.modelName),
             .init(label: "Generation",   value: profile.isSupported
                   ? "1st Gen (supported)"
                   : "1st Gen — detected, not supported in this build"),
@@ -746,7 +746,7 @@ struct FirstLaunchCard: View {
                     .font(.title3)            // regular weight — visual contrast with the bold title above
                     .foregroundStyle(Theme.textPrimary)
             }
-            Text("For \(state.profile.displayName)")
+            Text("For \(state.profile.modelName)")
                 .font(.caption)
                 .foregroundStyle(Theme.textSecondary)
             Text("Your Scarlett keeps its routing and mixer state in flash. Keep what's already on the device, or start from a clean default config?")

@@ -30,8 +30,11 @@ public struct DeviceProfile: Sendable, Equatable {
     /// Internal MixControl identifier ("USB14Tracker" etc.) — handy for
     /// debugging and cross-referencing with the original binary.
     public let internalName: String
-    /// Marketing name shown to users.
-    public let displayName: String
+    /// Marketing model name without the generation ("Scarlett 8i6") — used
+    /// where the UI spells out "1st Gen" separately.
+    public let modelName: String
+    /// Full name shown to users ("Scarlett 8i6 (1st Gen)").
+    public var displayName: String { "\(modelName) (1st Gen)" }
     /// True for everything we've not personally validated on hardware.
     public let isExperimental: Bool
 
@@ -151,7 +154,7 @@ extension DeviceProfile {
     public static let scarlett8i6 = DeviceProfile(
         productID: 0x8002,
         internalName: "USB14Tracker",
-        displayName: "Scarlett 8i6 (1st gen)",
+        modelName: "Scarlett 8i6",
         isExperimental: false,
         matrixInputCount: 18,
         mixBusCount: 6,
@@ -200,7 +203,7 @@ extension DeviceProfile {
     public static let scarlett18i6 = DeviceProfile(
         productID: 0x8004,
         internalName: "USB26Tracker",
-        displayName: "Scarlett 18i6 (1st gen)",
+        modelName: "Scarlett 18i6",
         isExperimental: true,
         matrixInputCount: 18,
         mixBusCount: 6,
@@ -266,7 +269,7 @@ extension DeviceProfile {
     public static let scarlett18i8 = DeviceProfile(
         productID: 0x8014,
         internalName: "USB24Tracker",
-        displayName: "Scarlett 18i8 (1st gen)",
+        modelName: "Scarlett 18i8",
         isExperimental: false,
         matrixInputCount: 18,
         mixBusCount: 8,
@@ -345,7 +348,7 @@ extension DeviceProfile {
     public static let scarlett6i6 = DeviceProfile(
         productID: 0x8012,
         internalName: "Saffire6i6",
-        displayName: "Scarlett 6i6 (1st gen)",
+        modelName: "Scarlett 6i6",
         isExperimental: true,
         matrixInputCount: 18,
         mixBusCount: 8,
@@ -413,7 +416,7 @@ extension DeviceProfile {
     public static let scarlett18i20 = DeviceProfile(
         productID: 0x800c,
         internalName: "Saffire18i20",
-        displayName: "Scarlett 18i20 (1st gen)",
+        modelName: "Scarlett 18i20",
         isExperimental: false,   // confirmed on hardware: routing, matrix,
                                  // meters, output stages, hw monitor section
         matrixInputCount: 18,
