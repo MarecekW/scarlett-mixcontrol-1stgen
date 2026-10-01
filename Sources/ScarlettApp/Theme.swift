@@ -22,11 +22,29 @@ enum StripLayout {
     static let headerHeight:        CGFloat = 50
     static let switchRowHeight:     CGFloat = 22
     static let panRowHeight:        CGFloat = 30
+    /// Fader / meter column height: fills the mixer page's spare height
+    /// (see `MixerPaneView`) within these bounds; `faderHeight` is the
+    /// default before the page is measured.
     static let faderHeight:         CGFloat = 220
-    static let peakReadoutHeight:   CGFloat = 28
+    static let faderHeightRange:    ClosedRange<CGFloat> = 180...420
+    static let peakReadoutHeight:   CGFloat = 18
     /// Bottom controls = single 22-pt row, contents centered.
     static let controlsHeight:      CGFloat = 22
     static let vSpacing:            CGFloat = 6
+    /// Padding inside a strip card, above and below its sections.
+    static let cardPaddingV:        CGFloat = 10
+    /// How much taller the pinned DAW / output cards are than the channel
+    /// cards at top and bottom, so they read as fixed outputs.  Channel
+    /// strips sit this far in from the row's edges, which also keeps the
+    /// scroll view from clipping their border, so every strip's sections
+    /// (and 0 dB line) stay level.
+    static let pinnedOutset:        CGFloat = 6
+}
+
+extension EnvironmentValues {
+    /// Height of every strip's fader / meter column, set once for the whole
+    /// mixer so all strips match.
+    @Entry var faderHeight: CGFloat = StripLayout.faderHeight
 }
 
 // Centralised palette to keep the Control-2-style dark look consistent.
@@ -70,6 +88,8 @@ enum Theme {
     static let faderKnobShadow = Color.black.opacity(0.5)
     static let faderTrack = Color(white: 0.06)
     static let faderTrackFill = Color(white: 0.32)
+    /// Background of numeric readout fields (fader level, max peak).
+    static let readoutField = Color(white: 0.11)
 
     /// Meter gradient stops.
     static let meterLow = Color(red: 0.30, green: 0.80, blue: 0.40)

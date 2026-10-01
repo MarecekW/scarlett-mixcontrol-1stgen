@@ -167,7 +167,7 @@ struct MatrixMixerView: View {
                         ChannelStrip(channel: ch, state: state)
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, StripLayout.pinnedOutset)
             }
             if state.hasPinnedDawReturn {
                 PinnedDawStrip(state: state)

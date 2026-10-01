@@ -8,6 +8,7 @@ import ScarlettCore
 struct ChannelStrip: View {
     let channel: Int
     @Bindable var state: MixerState
+    @Environment(\.faderHeight) private var faderHeight
     @State private var editingName: Bool = false
     @State private var nameDraft: String = ""
     @FocusState private var nameFocused: Bool
@@ -24,14 +25,14 @@ struct ChannelStrip: View {
             panSlider
                 .frame(height: StripLayout.panRowHeight)
             fader
-                .frame(height: StripLayout.faderHeight)
+                .frame(height: faderHeight)
             peakReadout
                 .frame(height: StripLayout.peakReadoutHeight)
             mutesolo(isMuted: isMuted, isSoloed: isSoloed)
                 .frame(height: StripLayout.controlsHeight)
         }
         .frame(width: StripLayout.width)
-        .padding(.vertical, 10)
+        .padding(.vertical, StripLayout.cardPaddingV)
         .padding(.horizontal, 6)
         .background(Theme.panel)
         .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -85,6 +86,7 @@ struct ChannelStrip: View {
     private func header(source: SignalSource) -> some View {
         VStack(spacing: 3) {
             nameField
+            Spacer(minLength: 0)
             ThemedMenuPicker(
                 options: state.matrixSourceOptions,
                 displayName: { $0.displayName },
@@ -99,6 +101,8 @@ struct ChannelStrip: View {
                 .frame(height: 2)
                 .padding(.horizontal, 2)
         }
+        // Fixed like the pinned strips' headers, so the rows below line up.
+        .frame(height: StripLayout.headerHeight, alignment: .bottom)
     }
 
     /// Channel name — defaults to "Ch N", double-click to rename.
@@ -168,13 +172,7 @@ struct ChannelStrip: View {
 
             DbScale()
         }
-        .frame(height: 220)
-        .overlay(alignment: .topTrailing) {
-            Text(formatDb(level))
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(state.mixerMutes[channel] ? Theme.muteActive : Theme.textSecondary)
-                .padding(.top, -16)
-        }
+        .frame(height: faderHeight)
     }
 
     private var panSlider: some View {
@@ -208,7 +206,14 @@ struct ChannelStrip: View {
 
     private var peakReadout: some View {
         let source = state.mixerSources[channel]
-        return StripPeakReadout(state: state, source: source, profile: state.profile)
+        let pair = MixerState.pairIndex(of: state.selectedBus)
+        return StripReadout(
+            state: state,
+            faderDb: state.mixerLevels[channel][pair],
+            faderMuted: state.mixerMutes[channel],
+            maxPeak: { StripMeter.level(from: $0.peaksMax, source: source, profile: $0.profile) },
+            resetHelp: "Click to reset this channel's max peak"
+        ) { state.clearMaxPeak(forSource: source) }
     }
 
     // MARK: - Mute / Solo
@@ -229,11 +234,6 @@ struct ChannelStrip: View {
         }
     }
 
-    private func formatDb(_ db: Double) -> String {
-        if db <= -60 { return "−∞" }
-        let r = Int(db.rounded())
-        return r > 0 ? "+\(r)" : "\(r)"
-    }
 }
 
 /// Compact Line/Instrument toggle for the combo-input strips (Analog 1, 2).
@@ -276,13 +276,12 @@ struct StripMeter: View {
     @Bindable var state: MixerState
     let source: SignalSource
     let profile: DeviceProfile
-    var height: CGFloat = 220
 
     var body: some View {
         let live = Self.level(from: state.peaks, source: source, profile: profile)
         let held = Self.level(from: state.peaksHeld, source: source, profile: profile)
         let max_ = Self.level(from: state.peaksMax, source: source, profile: profile)
-        VerticalMeter(db: live, peakDb: held, maxPeakDb: max_, height: height)
+        VerticalMeter(db: live, peakDb: held, maxPeakDb: max_)
     }
 
     static func level(from peaks: PeakReading, source: SignalSource, profile: DeviceProfile) -> Double {
@@ -291,38 +290,47 @@ struct StripMeter: View {
     }
 }
 
-/// Numeric "Pk" + clickable "Mx" peak readout. Isolated for the same reason
-/// as `StripMeter` — only this view re-renders when the peak values change.
+/// The strip's readout row, DAW style: the fader's level on the left (under
+/// the fader) and the meter's max peak since the last reset on the right
+/// (under the meter).  Click the max peak to reset it; it turns red at
+/// 0 dB or above ("-0.0" is just under full scale, not a clip).  Reads the
+/// peaks itself, so 20 Hz meter updates re-render only this row, not the
+/// whole strip.
 @MainActor
-struct StripPeakReadout: View {
+struct StripReadout: View {
     @Bindable var state: MixerState
-    let source: SignalSource
-    let profile: DeviceProfile
+    /// The fader's level, or nil for an output without a fader.
+    let faderDb: Double?
+    var faderMuted = false
+    /// The max peak to show, read from `state` (louder side of a pair).
+    let maxPeak: (MixerState) -> Double
+    let resetHelp: String
+    let reset: () -> Void
 
     var body: some View {
-        let peak = StripMeter.level(from: state.peaksHeld, source: source, profile: profile)
-        let max_ = StripMeter.level(from: state.peaksMax, source: source, profile: profile)
-        VStack(spacing: 1) {
-            Text(formatPeak("Pk", peak))
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(Theme.textSecondary)
-            Button {
-                state.clearMaxPeak(forSource: source)
-            } label: {
-                Text(formatPeak("Mx", max_))
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(Theme.meterHigh)
-                    .contentShape(Rectangle())
+        let peak = maxPeak(state)
+        HStack(spacing: 2) {
+            // Cubase-style contrast: the fader level bright, the peak dimmer.
+            cell(faderDb.map(DbAxis.format) ?? "",
+                 color: faderMuted ? Theme.muteActive : Theme.textPrimary)
+            Button(action: reset) {
+                cell(peak.isFinite && peak > DbAxis.meterFloor ? String(format: "%.1f", peak) : "−∞",
+                     color: peak >= 0 ? Theme.failure : Theme.textSecondary.opacity(0.8))
             }
             .buttonStyle(.plain)
-            .help("Click to reset this channel's max peak")
+            .help(resetHelp)
         }
-        .frame(maxWidth: .infinity)
     }
 
-    private func formatPeak(_ label: String, _ db: Double) -> String {
-        if !db.isFinite || db <= -60 { return "\(label) −∞" }
-        return String(format: "%@ %5.1f", label, db)
+    private func cell(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.readoutField)
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .contentShape(Rectangle())
     }
 }
 

@@ -266,6 +266,10 @@ struct ContentView: View {
 @MainActor
 struct MixerPaneView: View {
     @Bindable var state: MixerState
+    /// Fader column height, sized so the page fits the window (see below).
+    @State private var faderHeight = StripLayout.faderHeight
+    @State private var contentHeight: CGFloat = 0
+    @State private var viewportHeight: CGFloat = 0
 
     var body: some View {
         ConnectionOverlay(state: state) {
@@ -275,9 +279,31 @@ struct MixerPaneView: View {
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                    contentHeight = $0
+                    fitFaders()
+                }
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                viewportHeight = $0
+                fitFaders()
+            }
+            .environment(\.faderHeight, faderHeight)
             .background(Theme.background)
         }
+    }
+
+    /// Give the faders whatever height the window has left over.  Everything
+    /// on the page except the fader columns has a fixed height, so the
+    /// content minus the current fader height is constant and this settles
+    /// after one pass.  Outside `faderHeightRange` the page scrolls (tiny
+    /// window) or keeps spare room (very tall window).
+    private func fitFaders() {
+        guard contentHeight > 0, viewportHeight > 0 else { return }
+        let fixed = contentHeight - faderHeight
+        let range = StripLayout.faderHeightRange
+        let fitted = min(max(viewportHeight - fixed, range.lowerBound), range.upperBound)
+        if abs(fitted - faderHeight) >= 1 { faderHeight = fitted.rounded(.down) }
     }
 }
 

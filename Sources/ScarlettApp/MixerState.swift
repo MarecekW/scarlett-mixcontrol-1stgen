@@ -111,7 +111,7 @@ final class MixerState {
 
     // MARK: - User-controlled values (defaults to "no change")
     //
-    // Attenuation sliders: -60...0 dB range, default 0 = no attenuation.
+    // Attenuation sliders: off (-128 dB) ... 0 dB, default 0 = no attenuation.
     // We start sliders at 0 dB but DO NOT push that value to the device on
     // launch (the user might be running at -20 dB right now and we'd boost
     // them). First user change sends the value.
@@ -195,7 +195,7 @@ final class MixerState {
     // computed on demand by `effectiveGain(...)` from those four fields.
     var mixerSources: [SignalSource] = Array(repeating: .off, count: 18)
     /// One fader value per channel per stereo bus pair (M1+M2, M3+M4, M5+M6).
-    /// Range -60…+6 dB, default 0.
+    /// Range off (-128 dB, `DbAxis.off`) … +6 dB, default 0.
     var mixerLevels: [[Double]] = Array(repeating: Array(repeating: 0, count: 3), count: 18)
     /// One pan position per channel per stereo bus pair. -1 = full left,
     /// 0 = center (no attenuation either side), +1 = full right.

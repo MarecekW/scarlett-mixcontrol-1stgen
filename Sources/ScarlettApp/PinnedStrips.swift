@@ -9,6 +9,7 @@ import ScarlettCore
 @MainActor
 struct PinnedDawStrip: View {
     @Bindable var state: MixerState
+    @Environment(\.faderHeight) private var faderHeight
 
     private var leftCh: Int  { MixerState.pinnedDawLeftChannel  }
     private var rightCh: Int { MixerState.pinnedDawRightChannel }
@@ -25,7 +26,7 @@ struct PinnedDawStrip: View {
             controls
         }
         .frame(width: StripLayout.width)
-        .padding(.vertical, 10)
+        .padding(.vertical, StripLayout.cardPaddingV + StripLayout.pinnedOutset)
         .padding(.horizontal, 6)
         .background(Theme.panel)
         .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -49,6 +50,14 @@ struct PinnedDawStrip: View {
         .frame(height: StripLayout.headerHeight, alignment: .bottom)
     }
 
+    private func meterCaption(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 8, design: .monospaced))
+            .foregroundStyle(Theme.textSecondary)
+            .fixedSize()
+            .offset(y: 4)
+    }
+
     private var fader: some View {
         let pair = MixerState.pairIndex(of: state.selectedBus)
         let level = state.mixerLevels[leftCh][pair]
@@ -66,50 +75,32 @@ struct PinnedDawStrip: View {
                 }
             }
 
-            VStack(spacing: 1) {
-                StripMeter(state: state, source: .daw1, profile: state.profile, height: 220)
-                Text("L").font(.system(size: 8, design: .monospaced))
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            VStack(spacing: 1) {
-                StripMeter(state: state, source: .daw2, profile: state.profile, height: 220)
-                Text("R").font(.system(size: 8, design: .monospaced))
-                    .foregroundStyle(Theme.textSecondary)
-            }
+            // The L/R captions hang below the meters without taking layout
+            // space, so the meters stay on the shared dB axis.
+            StripMeter(state: state, source: .daw1, profile: state.profile)
+                .overlay(alignment: .bottom) { meterCaption("L") }
+            StripMeter(state: state, source: .daw2, profile: state.profile)
+                .overlay(alignment: .bottom) { meterCaption("R") }
 
             DbScale()
         }
-        .frame(height: StripLayout.faderHeight)
-        .overlay(alignment: .topTrailing) {
-            Text(formatDb(level))
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(isMuted ? Theme.muteActive : Theme.textSecondary)
-                .padding(.top, -16)
-        }
+        .frame(height: faderHeight)
     }
 
     private var peakReadout: some View {
-        let peakL = StripMeter.level(from: state.peaksHeld, source: .daw1, profile: state.profile)
-        let peakR = StripMeter.level(from: state.peaksHeld, source: .daw2, profile: state.profile)
-        let maxL  = StripMeter.level(from: state.peaksMax,  source: .daw1, profile: state.profile)
-        let maxR  = StripMeter.level(from: state.peaksMax,  source: .daw2, profile: state.profile)
-        let peak = max(peakL, peakR)
-        let max_ = max(maxL, maxR)
-        return VStack(spacing: 1) {
-            Text(formatPeak("Pk", peak))
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(Theme.textSecondary)
-            Button {
-                state.clearMaxPeak(forSource: .daw1)
-                state.clearMaxPeak(forSource: .daw2)
-            } label: {
-                Text(formatPeak("Mx", max_))
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(Theme.meterHigh)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Click to reset DAW 1+2 max peaks")
+        let pair = MixerState.pairIndex(of: state.selectedBus)
+        return StripReadout(
+            state: state,
+            faderDb: state.mixerLevels[leftCh][pair],
+            faderMuted: state.mixerMutes[leftCh],
+            maxPeak: { s in
+                max(StripMeter.level(from: s.peaksMax, source: .daw1, profile: s.profile),
+                    StripMeter.level(from: s.peaksMax, source: .daw2, profile: s.profile))
+            },
+            resetHelp: "Click to reset DAW 1+2 max peaks"
+        ) {
+            state.clearMaxPeak(forSource: .daw1)
+            state.clearMaxPeak(forSource: .daw2)
         }
         .frame(height: StripLayout.peakReadoutHeight)
     }
@@ -128,16 +119,6 @@ struct PinnedDawStrip: View {
         .frame(height: StripLayout.controlsHeight)
     }
 
-    private func formatDb(_ db: Double) -> String {
-        if db <= -60 { return "−∞" }
-        let r = Int(db.rounded())
-        return r > 0 ? "+\(r)" : "\(r)"
-    }
-
-    private func formatPeak(_ label: String, _ db: Double) -> String {
-        if !db.isFinite || db <= -60 { return "\(label) −∞" }
-        return String(format: "%@ %5.1f", label, db)
-    }
 }
 
 // MARK: - PinnedMasterStrip
@@ -174,6 +155,7 @@ struct PinnedMasterStrip: View {
 @MainActor
 struct OutputStrip: View {
     @Bindable var state: MixerState
+    @Environment(\.faderHeight) private var faderHeight
     let title: String
     let outputs: [PhysicalOutput]
     let showDim: Bool
@@ -196,7 +178,7 @@ struct OutputStrip: View {
     /// otherwise the software pair attenuation.
     private var displayedDb: Double {
         if mirrorsHardwarePot, let hw = state.hwMonitor {
-            return max(-60, hw.potAttenuationDb)
+            return max(DbAxis.off, hw.potAttenuationDb)
         }
         return state.pairAtten(leftWValue: leftWValue)
     }
@@ -229,7 +211,7 @@ struct OutputStrip: View {
             controls
         }
         .frame(width: StripLayout.width)
-        .padding(.vertical, 10)
+        .padding(.vertical, StripLayout.cardPaddingV + StripLayout.pinnedOutset)
         .padding(.horizontal, 6)
         .background(Theme.panel)
         .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -259,11 +241,11 @@ struct OutputStrip: View {
                 // Level is owned by the front-panel knob; the fader just
                 // tracks it. Not draggable — turning the knob moves it.
                 VerticalFader(db: Binding(get: { displayedDb }, set: { _ in }),
-                              dbRange: -60...0)
+                              axis: .attenuation)
                     .allowsHitTesting(false)
                     .help("Monitor level is set by the front-panel knob on this device — the fader mirrors it.")
             } else if hasGainStage {
-                VerticalFader(db: atten, dbRange: -60...0)
+                VerticalFader(db: atten, axis: .attenuation)
                     .contextMenu {
                         Button("Reset to 0 dB") {
                             state.userSetPairAtten(leftWValue: leftWValue, db: 0)
@@ -276,46 +258,29 @@ struct OutputStrip: View {
                 RoutedMeter(state: state, source: rightSource, profile: state.profile)
             }
 
-            DbScale(
-                dbRange: -60...0,
-                marks: [0, -6, -12, -18, -24, -30, -36, -48, -60]
-            )
+            DbScale(axis: .attenuation)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: StripLayout.faderHeight)
-        .overlay(alignment: .topTrailing) {
-            if hasGainStage {
-                Text("\(Int(displayedDb))")
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(Theme.textSecondary)
-                    .padding(.top, -16)
-            }
-        }
+        .frame(height: faderHeight)
     }
 
-    /// Pk / Mx based on the louder of the two currently-routed sources.
+    /// Max peak of the louder of the two currently-routed sources.
     private var peakReadout: some View {
-        let peakL = RoutedMeter.level(from: state.peaksHeld, source: leftSource, profile: state.profile)
-        let peakR = RoutedMeter.level(from: state.peaksHeld, source: rightSource, profile: state.profile)
-        let maxL  = RoutedMeter.level(from: state.peaksMax,  source: leftSource, profile: state.profile)
-        let maxR  = RoutedMeter.level(from: state.peaksMax,  source: rightSource, profile: state.profile)
-        let peak = max(peakL, peakR)
-        let max_ = max(maxL, maxR)
-        return VStack(spacing: 1) {
-            Text(formatPeak("Pk", peak))
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(Theme.textSecondary)
-            Button {
-                state.clearMaxPeak(leftSource)
-                state.clearMaxPeak(rightSource)
-            } label: {
-                Text(formatPeak("Mx", max_))
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(Theme.meterHigh)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Click to reset this output's max peaks")
+        let (left, right) = (leftSource, rightSource)
+        let muted = state.outputMuted(leftWValue)
+            && (rightOutput.map { state.outputMuted($0.wValue) } ?? true)
+        return StripReadout(
+            state: state,
+            faderDb: hasGainStage ? displayedDb : nil,
+            faderMuted: muted,
+            maxPeak: { s in
+                max(RoutedMeter.level(from: s.peaksMax, source: left, profile: s.profile),
+                    RoutedMeter.level(from: s.peaksMax, source: right, profile: s.profile))
+            },
+            resetHelp: "Click to reset this output's max peaks"
+        ) {
+            state.clearMaxPeak(left)
+            state.clearMaxPeak(right)
         }
         .frame(height: StripLayout.peakReadoutHeight)
     }
@@ -394,10 +359,6 @@ struct OutputStrip: View {
         }
     }
 
-    private func formatPeak(_ label: String, _ db: Double) -> String {
-        if !db.isFinite || db <= -60 { return "\(label) −∞" }
-        return String(format: "%@ %5.1f", label, db)
-    }
 }
 
 // MARK: - HWIndicator
@@ -437,13 +398,14 @@ struct RoutedMeter: View {
     @Bindable var state: MixerState
     let source: MixBus
     let profile: DeviceProfile
-    var height: CGFloat = 220
+    /// Routed meters sit on output strips, beside an attenuator.
+    var axis: DbAxis = .attenuation
 
     var body: some View {
         let live = Self.level(from: state.peaks,    source: source, profile: profile)
         let held = Self.level(from: state.peaksHeld, source: source, profile: profile)
         let max_ = Self.level(from: state.peaksMax,  source: source, profile: profile)
-        VerticalMeter(db: live, peakDb: held, maxPeakDb: max_, height: height)
+        VerticalMeter(db: live, peakDb: held, maxPeakDb: max_, axis: axis)
     }
 
     static func level(from reading: PeakReading, source: MixBus, profile: DeviceProfile) -> Double {
