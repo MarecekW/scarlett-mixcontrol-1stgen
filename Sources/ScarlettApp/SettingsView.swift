@@ -43,6 +43,7 @@ struct SettingsView: View {
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
         .preferredColorScheme(.dark)
+        .background(WindowAccessor { AppController.shared.attachSettingsWindow($0) })
         // The user can also remove the login item in System Settings, so
         // re-read it whenever we come back to the app.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -61,7 +62,7 @@ final class LoginItem {
     private var error: String?
 
     /// Login items need a real app bundle; `swift run` has none.
-    static var isAvailable: Bool { Bundle.main.bundleIdentifier != nil }
+    static var isAvailable: Bool { Bundle.main.bundleURL.pathExtension == "app" }
 
     init() { refresh() }
 

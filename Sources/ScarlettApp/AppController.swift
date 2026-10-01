@@ -31,9 +31,11 @@ final class AppController {
     /// mixer view, so it's there even if the status item is hidden.
     @ObservationIgnored var openWindowAction: OpenWindowAction?
 
-    /// The mixer window, recorded by `MainWindowAccessor` each time SwiftUI
+    /// The mixer window, recorded by a `WindowAccessor` each time SwiftUI
     /// creates it.  Weak: SwiftUI owns it and may discard it on close.
     @ObservationIgnored private weak var mainWindow: NSWindow?
+    /// The Settings window, recorded the same way.
+    @ObservationIgnored private weak var settingsWindow: NSWindow?
 
     /// Set at launch when the app should start in the menu bar only; the
     /// window SwiftUI opens at launch is closed as soon as it attaches.
@@ -66,7 +68,7 @@ final class AppController {
 
     // MARK: - Main window
 
-    /// Called by `MainWindowAccessor` once the mixer view is in a window.
+    /// Called by a `WindowAccessor` once the mixer view is in a window.
     func attachMainWindow(_ win: NSWindow) {
         mainWindow = win
 
@@ -105,15 +107,40 @@ final class AppController {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    // MARK: - Settings window
+
+    func attachSettingsWindow(_ win: NSWindow) {
+        settingsWindow = win
+    }
+
+    /// Open Settings in front.  `openSettings` creates the window
+    /// asynchronously, and from the menu bar panel the activation can lose
+    /// to the panel closing — so activate, then front the window, on the
+    /// next turn of the run loop.
+    func showSettings(_ openSettings: OpenSettingsAction) {
+        openSettings()
+        Task { @MainActor in
+            NSApp.activate(ignoringOtherApps: true)
+            self.settingsWindow?.makeKeyAndOrderFront(nil)
+        }
+    }
+
     // MARK: - Dock icon
 
     private func applyActivationPolicy() {
-        let windowWasOpen = mainWindow?.isVisible == true
+        // Usually flipped from the Settings window, possibly with the mixer
+        // open too.
+        let visible = [mainWindow, settingsWindow].compactMap { $0 }.filter(\.isVisible)
         NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
         // Switching policy deactivates the app and can push its windows
-        // behind others; put the mixer back in front if it was showing.
-        if windowWasOpen {
-            Task { @MainActor in self.showMainWindow() }
+        // behind others; put whatever was showing back in front, the
+        // window the user was in (Settings) last so it ends up key.
+        guard !visible.isEmpty else { return }
+        Task { @MainActor in
+            NSApp.activate(ignoringOtherApps: true)
+            let ordered = visible.filter { $0 === self.mainWindow }
+                + visible.filter { $0 !== self.mainWindow }
+            for win in ordered { win.makeKeyAndOrderFront(nil) }
         }
     }
 
@@ -125,14 +152,24 @@ final class AppController {
 }
 
 /// Invisible view that reports the window hosting it to `AppController`.
-struct MainWindowAccessor: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { TrackingView() }
+struct WindowAccessor: NSViewRepresentable {
+    let onAttach: @MainActor (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView { TrackingView(onAttach: onAttach) }
     func updateNSView(_ nsView: NSView, context: Context) {}
 
     private final class TrackingView: NSView {
+        let onAttach: @MainActor (NSWindow) -> Void
+
+        init(onAttach: @escaping @MainActor (NSWindow) -> Void) {
+            self.onAttach = onAttach
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { nil }
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            if let window { AppController.shared.attachMainWindow(window) }
+            if let window { onAttach(window) }
         }
     }
 }

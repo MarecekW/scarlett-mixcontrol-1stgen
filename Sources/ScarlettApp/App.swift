@@ -54,7 +54,7 @@ struct ScarlettApp: App {
     var body: some Scene {
         Window("Scarlett MixControl", id: AppController.mainWindowID) {
             ContentView(state: state)
-                .background(MainWindowAccessor())
+                .background(WindowAccessor { AppController.shared.attachMainWindow($0) })
                 .frame(
                     minWidth: 1100,
                     idealWidth: 1340,

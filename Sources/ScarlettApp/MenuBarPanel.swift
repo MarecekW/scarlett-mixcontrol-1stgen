@@ -148,12 +148,7 @@ struct MenuBarPanel: View {
 
             Menu {
                 Button("Open Mixer") { AppController.shared.showMainWindow() }
-                Button("Settings…") {
-                    openSettings()
-                    // As with the mixer: an accessory app's windows open
-                    // behind the frontmost app unless it activates.
-                    NSApp.activate(ignoringOtherApps: true)
-                }
+                Button("Settings…") { AppController.shared.showSettings(openSettings) }
                 Divider()
                 Button("Quit Scarlett MixControl") { AppController.shared.quit() }
             } label: {
