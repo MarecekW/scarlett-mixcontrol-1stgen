@@ -82,6 +82,11 @@ struct ScarlettApp: App {
             }
         }
 
+        // Cmd+, — also opened from the menu bar panel's gear menu.
+        Settings {
+            SettingsView()
+        }
+
         // Always present: with the Dock icon hidden it's the only way back
         // to the app.
         MenuBarExtra {

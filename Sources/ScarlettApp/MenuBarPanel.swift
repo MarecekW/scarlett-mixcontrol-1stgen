@@ -52,6 +52,7 @@ struct MenuBarIcon: View {
 @MainActor
 struct MenuBarPanel: View {
     @Bindable var state: MixerState
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -147,6 +148,12 @@ struct MenuBarPanel: View {
 
             Menu {
                 Button("Open Mixer") { AppController.shared.showMainWindow() }
+                Button("Settings…") {
+                    openSettings()
+                    // As with the mixer: an accessory app's windows open
+                    // behind the frontmost app unless it activates.
+                    NSApp.activate(ignoringOtherApps: true)
+                }
                 Divider()
                 Button("Quit Scarlett MixControl") { AppController.shared.quit() }
             } label: {
@@ -390,7 +397,10 @@ private struct MenuBarPresetRow: View {
                 .background(Theme.panelRaised)
                 .clipShape(RoundedRectangle(cornerRadius: 3))
             }
-            .menuStyle(.borderlessButton)
+            // A button-style menu draws the label as-is (as the mixer's
+            // Outputs pill does); `.borderlessButton` would drop its fill.
+            .menuStyle(.button)
+            .buttonStyle(.pill)
             .menuIndicator(.hidden)
             .fixedSize()
             .disabled(presets.isEmpty)
