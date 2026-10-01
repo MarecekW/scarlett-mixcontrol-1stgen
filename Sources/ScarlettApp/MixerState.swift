@@ -563,8 +563,12 @@ final class MixerState {
         // Pinned output pairs — restore the user's choice, dropping labels
         // that don't exist on this profile (stale data from another build).
         if let saved = defaults.stringArray(forKey: visibleOutputsKey(for: profile)) {
+            // The 18i8's headphone pairs were once labelled "Phones" and
+            // "Line 5+6"; carry pins saved under the old names across.
+            let renamed: [String: String] = profile == .scarlett18i8
+                ? ["Phones": "Phones 1", "Line 5+6": "Phones 2"] : [:]
             let valid = Set(profile.physicalOutputs.map(\.pairLabel))
-            let filtered = Set(saved).intersection(valid)
+            let filtered = Set(saved.map { renamed[$0] ?? $0 }).intersection(valid)
             if !filtered.isEmpty { visiblePairLabels = filtered }
         }
 
