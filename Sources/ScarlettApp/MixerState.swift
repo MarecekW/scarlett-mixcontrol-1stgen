@@ -1451,6 +1451,29 @@ final class MixerState {
         savePresets()
     }
 
+    /// True when another preset for the same device already uses `name`.
+    /// Mirrors the name+device key `userSavePreset` overwrites by.
+    func presetNameTaken(_ name: String, excluding preset: ScarlettPreset) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let pid = effectiveProductID(for: preset)
+        return presets.contains {
+            $0.id != preset.id && $0.name == trimmed && effectiveProductID(for: $0) == pid
+        }
+    }
+
+    /// Rename a saved preset.  Returns false (and changes nothing) if the
+    /// name is empty or already taken by another preset for the same device.
+    @discardableResult
+    func userRenamePreset(_ preset: ScarlettPreset, to name: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              !presetNameTaken(trimmed, excluding: preset),
+              let idx = presets.firstIndex(where: { $0.id == preset.id }) else { return false }
+        presets[idx].name = trimmed
+        savePresets()
+        return true
+    }
+
     /// Build a snapshot of the current state in `ScarlettPreset` form.  The
     /// snapshot is identical in shape to what `userSavePreset` writes to
     /// the in-app list; the difference is just where it's persisted.
