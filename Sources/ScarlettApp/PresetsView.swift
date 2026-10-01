@@ -55,7 +55,7 @@ struct PresetsView: View {
                         .buttonStyle(.pill)
                         .fixedSize()
                     }
-                    Text("Save the current state to a .scmx file to back it up or move it to another Mac, or open one. Same as File → Save / Open snapshot (⌘S / ⌘O).")
+                    Text("Save the current state to a .scmx file to back it up or move it to another Mac, or open one. With the Dock icon shown, also in the File menu (⌘S / ⌘O).")
                         .font(.caption).foregroundStyle(Theme.textSecondary)
                 }
                 Panel(title: "Saved presets") {

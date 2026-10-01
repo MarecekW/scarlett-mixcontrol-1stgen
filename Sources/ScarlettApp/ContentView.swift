@@ -153,7 +153,7 @@ struct ContentView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(state.syncLocked ? .green : .orange)
                     .help(state.syncLocked ? "Clock locked" : "No clock lock")
-                appButtons
+                appButtons(vertical: true)
                     .padding(.top, 4)
             }
             .frame(maxWidth: .infinity)
@@ -169,7 +169,7 @@ struct ContentView: View {
                     .font(.caption2)
                     .foregroundStyle(Theme.textSecondary.opacity(0.7))
                     .padding(.top, 4)
-                appButtons
+                appButtons(vertical: false)
                     .padding(.top, 4)
             }
             .padding(.horizontal, 16)
@@ -179,15 +179,20 @@ struct ContentView: View {
     }
 
     /// Settings and Quit.  With the Dock icon hidden the app has no top
-    /// menu bar, so these are the in-window way to reach them.
-    private var appButtons: some View {
-        HStack(spacing: 4) {
-            sidebarIconButton("gearshape", help: "Settings") {
-                AppController.shared.showSettings(openSettings)
-            }
-            sidebarIconButton("power", help: "Quit Scarlett MixControl") {
-                AppController.shared.quit()
-            }
+    /// menu bar, so these are the in-window way to reach them.  Kept well
+    /// apart so a slip off Settings doesn't quit the app.
+    @ViewBuilder
+    private func appButtons(vertical: Bool) -> some View {
+        let settings = sidebarIconButton("gearshape", help: "Settings") {
+            AppController.shared.showSettings(openSettings)
+        }
+        let quit = sidebarIconButton("power", help: "Quit Scarlett MixControl") {
+            AppController.shared.quit()
+        }
+        if vertical {
+            VStack(spacing: 14) { settings; quit }
+        } else {
+            HStack { settings; Spacer(minLength: 0); quit }
         }
     }
 
