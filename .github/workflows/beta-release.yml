@@ -3,9 +3,12 @@
 # pre-releases; any other tag becomes a regular release marked Latest.
 #
 # How to release:
-#   1. Push a tag:  git tag v0.2.0 && git push origin v0.2.0
-#                   (or v0.2.1-beta.1 for a pre-release)
-#   2. Or GitHub → Actions → "Release" → Run workflow (optional custom tag)
+#   1. Push a tag:  git tag vX.Y.Z && git push origin vX.Y.Z
+#                   (or vX.Y.Z-beta.N for a pre-release)
+#   2. Or GitHub → Actions → "Release" → Run workflow with a tag
+#
+# The tag is the only place the version lives; make-app.sh takes it from
+# APP_VERSION here and from `git describe` for local builds.
 #
 # Download: repo → Releases → Scarlett.MixControl.app.zip
 
@@ -15,8 +18,8 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g. v0.2.0-beta.1). Leave empty to auto-generate."
-        required: false
+        description: "Release tag (e.g. v0.2.1 or v0.2.1-beta.1)"
+        required: true
         type: string
   push:
     tags:
@@ -35,6 +38,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # full history: make-app.sh's build number is the commit count
 
       - name: Select Xcode 16
         uses: maxim-lobanov/setup-xcode@v1
@@ -51,19 +56,28 @@ jobs:
         id: version
         env:
           INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           if [ -n "$INPUT_TAG" ]; then
             TAG="$INPUT_TAG"
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
-            TAG="${{ github.ref_name }}"
+          elif [ "$REF_TYPE" = "tag" ]; then
+            TAG="$REF_NAME"
           else
-            TAG="v0.2.0-beta.${{ github.run_number }}"
-          fi
-          # GitHub release tags must not contain spaces.
-          if [[ "$TAG" =~ [[:space:]] ]]; then
-            echo "Invalid tag: $TAG" >&2
+            echo "No release tag: push a v* tag or pass one when running the workflow." >&2
             exit 1
           fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
+            echo "Invalid tag: $TAG (expected vX.Y.Z or vX.Y.Z-beta.N)" >&2
+            exit 1
+          fi
+          # A manual run for an existing tag must build that tag's commit, not
+          # the branch it was started from.
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            git checkout -q "$TAG"
+          fi
+          # The commit actually built; a new tag is created here too.
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Build .app and zip
@@ -83,6 +97,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ steps.version.outputs.commit }}
           name: Scarlett MixControl ${{ steps.version.outputs.tag }}
           prerelease: ${{ contains(steps.version.outputs.tag, 'beta') }}
           make_latest: ${{ !contains(steps.version.outputs.tag, 'beta') }}
@@ -104,7 +119,7 @@ jobs:
             ### Build info
             | | |
             |---|---|
-            | Commit | `${{ github.sha }}` |
+            | Commit | `${{ steps.version.outputs.commit }}` |
             | Workflow run | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
             | ZIP size | ${{ steps.checksum.outputs.size_kb }} KB |
             | SHA-256 | `${{ steps.checksum.outputs.sha256 }}` |

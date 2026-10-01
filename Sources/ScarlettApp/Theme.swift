@@ -3,10 +3,14 @@ import ScarlettCore
 
 enum AppInfo {
     /// Read from the bundle's `CFBundleShortVersionString` (set by
-    /// `scripts/make-app.sh`, which CI overrides with the release tag) so the
-    /// displayed version can't drift from the actual release. Falls back to a
-    /// dev string when run without a bundle (e.g. `swift run`).
-    static let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0-dev"
+    /// `scripts/make-app.sh` from the git tag) so the displayed version can't
+    /// drift from the actual release. Falls back to "dev" when run without a
+    /// bundle (e.g. `swift run`).
+    static let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+    /// `version` for display: "v0.2.1", but plain "dev" rather than "vdev".
+    static var displayVersion: String {
+        version.first?.isNumber == true ? "v\(version)" : version
+    }
 }
 
 /// Pixel-exact section heights shared by every strip in the mixer (channel,

@@ -161,7 +161,7 @@ struct ContentView: View {
                     Text("Firmware \(state.firmware)").font(.caption2).foregroundStyle(Theme.textSecondary)
                     Text("Serial \(state.serial)").font(.caption2).foregroundStyle(Theme.textSecondary)
                 }
-                Text("App v\(AppInfo.version)")
+                Text("App \(AppInfo.displayVersion)")
                     .font(.caption2)
                     .foregroundStyle(Theme.textSecondary.opacity(0.7))
                     .padding(.top, 4)
@@ -523,7 +523,7 @@ struct DeviceView: View {
                             Text("Scarlett MixControl — Community Edition")
                                 .font(.subheadline.bold())
                                 .foregroundStyle(Theme.textPrimary)
-                            Text("v\(AppInfo.version)")
+                            Text(AppInfo.displayVersion)
                                 .font(.subheadline.monospacedDigit())
                                 .foregroundStyle(Theme.textSecondary)
                         }

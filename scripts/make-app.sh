@@ -26,15 +26,21 @@ MACOS_DIR="$CONTENTS/MacOS"
 RESOURCES_DIR="$CONTENTS/Resources"
 BUNDLE_ID="dev.marekkramar.ScarlettMixControl"
 EXE_NAME="ScarlettMixControl"
-# Version shown in-app and in the bundle. Override via APP_VERSION (CI injects
-# the release tag); strip a leading "v" so "v0.2.0-beta.3" → "0.2.0-beta.3".
-APP_VERSION="${APP_VERSION:-0.2.0}"
+# Version shown in-app and in the bundle. CI passes the release tag via
+# APP_VERSION; local builds derive it from git ("0.2.0-6-ga258ff3-dirty", or
+# "0.2.1" on an exact tag), or "dev" when there's no git checkout.
+# A leading "v" is stripped so "v0.2.0-beta.3" → "0.2.0-beta.3".
+if [[ -z "${APP_VERSION:-}" ]]; then
+  APP_VERSION="$(git -C "$REPO_ROOT" describe --tags --dirty --match 'v[0-9]*' 2>/dev/null || echo dev)"
+fi
 APP_VERSION="${APP_VERSION#v}"
-APP_BUILD="${APP_BUILD:-2}"
+# Build number: commit count, increasing along main (needs full history in CI).
+APP_BUILD="${APP_BUILD:-$(git -C "$REPO_ROOT" rev-list --count HEAD 2>/dev/null || echo 0)}"
 ICON_SRC="$REPO_ROOT/Sources/ScarlettApp/Resources/AppIcon.png"
 ICONSET_DIR="$BUILD_ROOT/AppIcon.iconset"
 ICNS_FILE="$RESOURCES_DIR/AppIcon.icns"
 
+echo "→ Version $APP_VERSION ($APP_BUILD)"
 echo "→ Building swift-package executable ($CONFIG)…"
 swift build -c "$CONFIG" --product scarlett-app
 
