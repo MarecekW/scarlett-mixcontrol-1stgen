@@ -135,4 +135,17 @@ final class DeviceProfileTests: XCTestCase {
         XCTAssertEqual(MixBus.m1.rawValue, 0x14)
         XCTAssertEqual(MixBus.m6.rawValue, 0x19)
     }
+
+    /// The 18i20's front headphone jacks are hardwired analog taps of Line
+    /// 7/8 and Line 9/10 (Focusrite's support docs, 1st/2nd/3rd gen), while
+    /// its wValue 2/3 is a plain rear Line 3/4. Factory reset keys the Phones
+    /// defaults off `pairLabel.hasPrefix("Phones")`, so the labels must point
+    /// at the taps and never at the 8i6-style wValue 2/3.
+    func test18i20PhonesLabelsPointAtTheHeadphoneTaps() {
+        let outputs = DeviceProfile.scarlett18i20.physicalOutputs
+        let phones = outputs.filter { $0.pairLabel.hasPrefix("Phones") }
+        XCTAssertEqual(phones.map(\.wValue), [0x06, 0x07, 0x08, 0x09])
+        XCTAssertTrue(phones.filter { $0.wValue <= 0x07 }.allSatisfy { $0.pairLabel == "Phones 1" })
+        XCTAssertTrue(phones.filter { $0.wValue >= 0x08 }.allSatisfy { $0.pairLabel == "Phones 2" })
+    }
 }

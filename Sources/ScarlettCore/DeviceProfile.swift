@@ -401,6 +401,15 @@ extension DeviceProfile {
     // protocol entirely and is NOT this device.
     // Analog 1-8 = 0x14..0x1b, S/PDIF = 0x1c/0x1d, ADAT 1-8 = 0x1e..0x25,
     // DAW 1-20 = 0x00..0x13, Mix M1..M8 = 0x26..0x2d.
+    //
+    // Unlike the 8i6/18i6/18i8/6i6, this device has no dedicated "Phones"
+    // wValue — the front-panel headphone jacks are hardwired analog taps of
+    // two of the rear line outputs. Per Focusrite's own support article
+    // ("How do the headphone outputs work on the Scarlett 18i20?", which
+    // states this applies to 1st/2nd/3rd gen alike): Headphone 1 L/R taps
+    // Line Out 7/8, Headphone 2 L/R taps Line Out 9/10. Whatever is routed
+    // to those wValues plays on both the rear jack and the matching front
+    // headphone jack, through the same per-output gain stage.
     public static let scarlett18i20 = DeviceProfile(
         productID: 0x800c,
         internalName: "Saffire18i20",

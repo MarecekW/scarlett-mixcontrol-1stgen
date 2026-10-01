@@ -47,7 +47,7 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
 | 🔘  | **Hardware switches** — line/inst impedance, hi/lo gain, clock source, sample rate          |
 | 📊  | **Live peak meters** — all 18 inputs + 6 mix buses + 6 DAW playbacks, with held peaks       |
 | 💾  | **Save to hardware** — persist mixer state to device flash, survives power cycle            |
-| 📁  | **Snapshots** — save / load full configurations as `.8i6` JSON files (⌘S / ⌘O)              |
+| 📁  | **Snapshots** — save / load full configurations as `.scmx` JSON files (⌘S / ⌘O)             |
 | 🔌  | **Connection resilience** — auto-reconnect on USB drops, clear status overlay               |
 
 <br/>
@@ -137,8 +137,9 @@ The protocol itself was reverse-engineered by extracting the per-product signal 
 **Firmware quirks worth knowing:**
 
 - Routing GETs always return `00 00` regardless of what was last set — UserDefaults persistence is the only way to remember routes across launches.
-- Matrix-source assignment silently fails if the source is already wired to another channel — the app does an explicit `.off` disconnect on the previous owner first.
+- The firmware accepts the same source on two matrix channels and silently double-feeds every bus (+6 dB) — contrary to x42's notes; confirmed on the 8i6 and 18i20. The app disconnects any other channel holding a source before assigning it.
 - The `setMonitorMono` USB command crashes the firmware when sent from our process, even with byte-perfect parity to MixControl. Probably an undocumented authorization handshake at startup we haven't identified — the Mn button is hidden until we crack it.
+- The 18i20 has no dedicated "Phones" output, unlike the 8i6/18i6/18i8/6i6. Its front-panel headphone jacks are hardwired analog taps of Line Out 7/8 (Headphone 1) and Line Out 9/10 (Headphone 2) — confirmed by Focusrite's own support docs for the 18i20 across 1st/2nd/3rd gen. The app labels them Phones 1 and Phones 2, and factory reset routes the default mix to them instead of to Line 3/4.
 
 For full deep-dive, read the commit history — `d175367` (the matrix-mixer breakthrough) and `1294ff7` (feature parity additions) cover most of the protocol reasoning.
 

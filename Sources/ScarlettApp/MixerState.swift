@@ -1506,14 +1506,22 @@ final class MixerState {
         // rather than a specific PID so every model lands on the right preset.
         let hasADAT = p.sources.contains { $0.displayName.hasPrefix("ADAT") }
         let useMixOutputs = hasADAT
+
+        // Only Monitor and the Phones pair(s) default to a live source. Every
+        // other output (extra line pairs, S/PDIF, ADAT) defaults to Off, same
+        // as it always has — keyed by `pairLabel` rather than a hardcoded
+        // wValue because the 18i20's wValue 2/3 is Line 3/4; its Phones 1/2
+        // are Line 7–10 (see the 18i20's profile comment).
+        let monitorWValues = p.physicalOutputs.filter { $0.pairLabel == "Monitor" }.map(\.wValue)
+        let phonesWValues  = p.physicalOutputs.filter { $0.pairLabel.hasPrefix("Phones") }.map(\.wValue)
         for out in p.physicalOutputs {
             let source: MixBus
-            switch out.wValue {
-            case 0: source = useMixOutputs ? .m1 : .daw1
-            case 1: source = useMixOutputs ? .m2 : .daw2
-            case 2: source = useMixOutputs ? .m1 : .daw1
-            case 3: source = useMixOutputs ? .m2 : .daw2
-            default: source = .off
+            if out.isLeft, monitorWValues.contains(out.wValue) || phonesWValues.contains(out.wValue) {
+                source = useMixOutputs ? .m1 : .daw1
+            } else if !out.isLeft, monitorWValues.contains(out.wValue) || phonesWValues.contains(out.wValue) {
+                source = useMixOutputs ? .m2 : .daw2
+            } else {
+                source = .off
             }
             routes[out.wValue] = source
             if let dev = device {
@@ -1584,7 +1592,8 @@ final class MixerState {
         }
 
         saveMatrix()
-        let routeNote = useMixOutputs ? "Monitor + Phones = Mix M1/M2" : "Monitor + Phones = DAW 1/2"
+        let defaultedLabel = phonesWValues.isEmpty ? "Monitor" : "Monitor + Phones"
+        let routeNote = useMixOutputs ? "\(defaultedLabel) = Mix M1/M2" : "\(defaultedLabel) = DAW 1/2"
         logEvent(.info, "Reset", "Default config applied (\(routeNote))")
     }
 
