@@ -35,7 +35,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .mixer:   return "slider.vertical.3"
         case .routing: return "arrow.triangle.branch"
         case .presets: return "bookmark"
-        case .device:  return "gearshape"
+        case .device:  return "cable.connector"
         }
     }
 }
@@ -586,27 +586,8 @@ struct DeviceView: View {
 
                 EventLogPanel(state: state)
 
-                Panel(title: "About") {
+                Panel(title: "Compatibility") {
                     VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            Text("Scarlett MixControl — Community Edition")
-                                .font(.subheadline.bold())
-                                .foregroundStyle(Theme.textPrimary)
-                            Text(AppInfo.displayVersion)
-                                .font(.subheadline.monospacedDigit())
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                        Text("A community replacement for Focusrite's discontinued MixControl, which still launches on modern macOS but no longer detects the hardware.")
-                            .font(.caption).foregroundStyle(Theme.textSecondary)
-                        Text("Built by @MarecekW.")
-                            .font(.caption).foregroundStyle(Theme.textSecondary)
-                            .padding(.top, 4)
-
-                        Divider().padding(.vertical, 6)
-
-                        Text("Compatibility")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(Theme.textPrimary)
                         Text("This build drives every shipping 1st-generation USB Scarlett, with byte tables extracted from the original MixControl. The 8i6 and 18i8 are confirmed on hardware; the rest are beta and need an owner to verify.")
                             .font(.caption)
                             .foregroundStyle(Theme.textSecondary)

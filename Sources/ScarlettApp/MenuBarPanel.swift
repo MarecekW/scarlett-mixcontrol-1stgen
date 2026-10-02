@@ -82,10 +82,21 @@ struct MenuBarPanel: View {
 
     private var header: some View {
         HStack {
-            Text(state.isConnected ? state.profile.modelName : "Scarlett MixControl")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1)
+            Group {
+                if state.isConnected {
+                    Text(state.profile.modelName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    + Text(" (1st Gen)")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(Theme.textSecondary)
+                } else {
+                    Text("Scarlett MixControl")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                }
+            }
+            .lineLimit(1)
             Spacer()
             HStack(spacing: 5) {
                 Circle().fill(statusColor).frame(width: 7, height: 7)

@@ -2,8 +2,8 @@ import SwiftUI
 import AppKit
 import ServiceManagement
 
-/// App settings (Cmd+, or the menu bar panel's gear menu): the Dock icon
-/// and launch at login.
+/// App settings (Cmd+, or the menu bar panel's gear menu): the Dock icon,
+/// launch at login, and About.
 @MainActor
 struct SettingsView: View {
     @Bindable private var app = AppController.shared
@@ -36,6 +36,27 @@ struct SettingsView: View {
                     Button("Open Login Items Settings…") {
                         SMAppService.openSystemSettingsLoginItems()
                     }
+                }
+            }
+            Section("About") {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Text("Scarlett MixControl — Community Edition")
+                            .font(.subheadline.bold())
+                        Text(AppInfo.displayVersion)
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    Text("A community replacement for Focusrite's discontinued MixControl, which still launches on modern macOS but no longer detects the hardware.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Built by @MarecekW.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Link(destination: AppInfo.repositoryURL) {
+                    Label("View on GitHub", systemImage: "arrow.up.right.square")
                 }
             }
         }

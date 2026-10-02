@@ -82,6 +82,7 @@ In **Settings** (the ⚙ in the panel or the sidebar; also ⌘, while the Dock i
 
 - **Show in Dock** — turn off to run as a menu-bar-only utility: no Dock icon or ⌘Tab entry, and the app starts quietly in the menu bar. Reopening the app from Finder or Spotlight brings the mixer back.
 - **Launch at login** — start the app when you log in. With the Dock icon shown the mixer window opens at login too; turn Show in Dock off to start in the menu bar only.
+- **About** — the app version and a link to this repository.
 
 <br/>
 
