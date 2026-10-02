@@ -74,16 +74,13 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
 
 <br/>
 
-## 🔊 Menu bar
+## 🎚️ Menu bar panel
 
-Turn on **Show in menu bar** in Settings to get an icon in the menu bar. Click it for a compact panel with a volume slider, meter and mute for each output, preset recall, Mute all, and **Open Mixer**. Choose which outputs appear under **Mixer → Outputs → Show in menu bar**. Closing the mixer window keeps the app running; quit from the panel's ⚙ menu or the sidebar's power button.
+The app can add a panel to the macOS menu bar, where you can set each output's volume, watch its meters, mute it and switch presets without opening the mixer. I built it because my speakers are on Line 3/4, which has no volume knob on the interface. Turn it on in Settings.
 
-In **Settings** (the ⚙ in the panel or the sidebar; also ⌘, while the Dock icon is shown):
-
-- **Show in menu bar** — off by default; turn on for the menu bar icon and panel. It can't be off together with Show in Dock.
-- **Show in Dock** — with Show in menu bar on, turn off to run as a menu-bar-only utility: no Dock icon or ⌘Tab entry, and the app starts quietly in the menu bar. Reopening the app from Finder or Spotlight brings the mixer back.
-- **Launch at login** — start the app when you log in. With the Dock icon shown the mixer window opens at login too; turn Show in Dock off to start in the menu bar only.
-- **About** — the app version, a link to this repository, and "Update available" when GitHub has a newer release (checked at launch and every few hours; a dot on the ⚙ buttons points to it).
+<div align="center">
+  <img src="docs/screenshots/scr-mixcontrol-cc.png" alt="Menu bar panel — output volumes, meters and preset recall" width="360" />
+</div>
 
 <br/>
 
