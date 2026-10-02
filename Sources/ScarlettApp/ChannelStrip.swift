@@ -323,6 +323,17 @@ struct StripReadout: View {
     }
 
     private func cell(_ text: String, color: Color) -> some View {
+        ReadoutCell(text: text, color: color)
+    }
+}
+
+/// One field of a level / peak readout: monospaced figures on a dark
+/// inset — the mixer strips' readout row and the menu bar panel.
+struct ReadoutCell: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
         Text(text)
             .font(.system(size: 9, design: .monospaced))
             .foregroundStyle(color)

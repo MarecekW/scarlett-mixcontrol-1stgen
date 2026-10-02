@@ -77,7 +77,9 @@ struct MenuBarPanel: View {
             Divider().overlay(Theme.divider)
             footer
         }
-        .frame(width: 300)
+        // Wide enough for the footer with "Master muted" showing; any
+        // narrower and toggling Mute all shifts the content sideways.
+        .frame(width: 316)
         .background(Theme.panel)
         .preferredColorScheme(.dark)
         .background(WindowAccessor { AppController.shared.attachPanelWindow($0) })
@@ -276,24 +278,23 @@ private struct MenuBarOutputRow: View {
                     .padding(.horizontal, DbAxis.inset - 1)
             }
 
-            VStack(alignment: .trailing, spacing: 2) {
+            // The mixer strips' readout cells, stacked: the level beside
+            // the fader, the max peak beside the meter.
+            VStack(spacing: 2) {
                 Group {
                     if let hardwareTag {
-                        Text(hardwareTag)
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(Theme.soloActive)
+                        ReadoutCell(text: hardwareTag, color: Theme.soloActive)
                     } else {
-                        Text(DbAxis.format(displayedDb))
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(muted ? Theme.textSecondary.opacity(0.6) : Theme.textPrimary)
+                        ReadoutCell(text: DbAxis.format(displayedDb),
+                                    color: muted ? Theme.muteActive : Theme.textPrimary)
                     }
                 }
-                .lineLimit(1)
+                .padding(.vertical, 1)
                 .frame(height: 20)
                 PanelPeakReadout(state: state, outputs: outputs)
                     .frame(height: PanelMeter.height)
             }
-            .frame(width: 42, alignment: .trailing)
+            .frame(width: 44)
         }
         .opacity(muted ? 0.75 : 1)
         // On the row: the read-only fader can't be hovered.
@@ -317,7 +318,7 @@ private func routedSources(_ state: MixerState, _ outputs: [PhysicalOutput]) -> 
 /// the whole row.
 @MainActor
 private struct PanelMeter: View {
-    static let height: CGFloat = 9
+    static let height: CGFloat = 12
 
     @Bindable var state: MixerState
     let outputs: [PhysicalOutput]
@@ -400,12 +401,8 @@ private struct PanelPeakReadout: View {
         Button {
             for source in sources { state.clearMaxPeak(source) }
         } label: {
-            Text(peak.isFinite && peak > DbAxis.meterFloor ? String(format: "%.1f", peak) : "−∞")
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(peak >= 0 ? Theme.failure : Theme.textSecondary.opacity(0.8))
-                .lineLimit(1)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
+            ReadoutCell(text: peak.isFinite && peak > DbAxis.meterFloor ? String(format: "%.1f", peak) : "−∞",
+                        color: peak >= 0 ? Theme.failure : Theme.textSecondary.opacity(0.8))
         }
         .buttonStyle(.plain)
         .help("Max peak since the last reset. Click to reset.")
