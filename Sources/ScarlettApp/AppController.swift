@@ -59,8 +59,12 @@ final class AppController {
 
     private init() {
         let defaults = UserDefaults.standard
-        let dock = defaults.object(forKey: Self.showInDockKey) as? Bool ?? true
-        let menuBar = defaults.object(forKey: Self.showInMenuBarKey) as? Bool ?? true
+        // Defaults: a regular app with a Dock icon, no menu bar icon.  An
+        // older setup that already hid the Dock icon predates this setting
+        // and relied on the menu bar icon, so it keeps it.
+        let storedDock = defaults.object(forKey: Self.showInDockKey) as? Bool
+        let dock = storedDock ?? true
+        let menuBar = defaults.object(forKey: Self.showInMenuBarKey) as? Bool ?? (storedDock == false)
         showInDock = dock || !menuBar
         showInMenuBar = menuBar
     }
