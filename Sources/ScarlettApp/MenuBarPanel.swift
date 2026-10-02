@@ -275,7 +275,10 @@ private struct MenuBarOutputRow: View {
                 }
                 PanelMeter(state: state, outputs: outputs)
                     .frame(height: PanelMeter.height)
-                    .padding(.horizontal, DbAxis.inset - 1)
+                    .padding(.leading, DbAxis.inset - 1)
+                    // The over LED hangs past 0 dBFS, so the bar's end
+                    // still lines up with the fader track's.
+                    .padding(.trailing, DbAxis.inset - 1 - PanelMeter.ledSpace)
             }
 
             // The mixer strips' readout cells, stacked: the level beside
@@ -313,12 +316,17 @@ private func routedSources(_ state: MixerState, _ outputs: [PhysicalOutput]) -> 
 /// Thin horizontal meter per side of an output pair, in a recessed well
 /// under the fader, showing the level of whatever is routed to it — before
 /// the output's volume and mute, as on the mixer's output strips.  A white
-/// tick holds recent peaks, a red one the max since it was last reset.  Its
+/// tick holds recent peaks, a red one the max since it was last reset, and
+/// an over LED past the bar's end lights while that max is a clip.  Its
 /// own view, so the 12 Hz meter updates redraw just the bars rather than
 /// the whole row.
 @MainActor
 private struct PanelMeter: View {
     static let height: CGFloat = 12
+    /// Width of the over LED past each bar's end, with its gap.
+    static let ledSpace: CGFloat = ledWidth + ledGap
+    private static let ledWidth: CGFloat = 3
+    private static let ledGap: CGFloat = 1.5
 
     @Bindable var state: MixerState
     let outputs: [PhysicalOutput]
@@ -351,6 +359,15 @@ private struct PanelMeter: View {
         }
 
         var body: some View {
+            HStack(spacing: PanelMeter.ledGap) {
+                level
+                Rectangle()
+                    .fill(maxDb >= DbAxis.clip ? Theme.meterHigh : Theme.faderTrack)
+                    .frame(width: PanelMeter.ledWidth)
+            }
+        }
+
+        private var level: some View {
             GeometryReader { geo in
                 let width = geo.size.width
                 ZStack(alignment: .leading) {
@@ -389,7 +406,7 @@ private struct PanelMeter: View {
 }
 
 /// The louder side's max peak since the last reset, under the level — as
-/// in the mixer's strip readouts: red at 0 dB or above, click to reset.
+/// in the mixer's strip readouts: "CLIP" in red at full scale, click to reset.
 @MainActor
 private struct PanelPeakReadout: View {
     @Bindable var state: MixerState
@@ -401,8 +418,8 @@ private struct PanelPeakReadout: View {
         Button {
             for source in sources { state.clearMaxPeak(source) }
         } label: {
-            ReadoutCell(text: peak.isFinite && peak > DbAxis.meterFloor ? String(format: "%.1f", peak) : "−∞",
-                        color: peak >= 0 ? Theme.failure : Theme.textSecondary.opacity(0.8))
+            ReadoutCell(text: DbAxis.formatPeak(peak),
+                        color: peak >= DbAxis.clip ? Theme.failure : Theme.textSecondary.opacity(0.8))
         }
         .buttonStyle(.plain)
         .help("Max peak since the last reset. Click to reset.")
