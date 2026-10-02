@@ -1475,7 +1475,7 @@ final class MixerState {
     }
 
     /// Overwrite a saved preset with the current state, keeping its name
-    /// and its place in the list — the "Update" for a modified preset.
+    /// and its place in the list — "Save modified" on a modified preset.
     func userUpdatePreset(_ preset: ScarlettPreset) {
         guard let idx = presets.firstIndex(where: { $0.id == preset.id }) else { return }
         var updated = currentSnapshot(named: preset.name, id: preset.id)

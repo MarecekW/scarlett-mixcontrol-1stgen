@@ -294,7 +294,7 @@ struct PresetsView: View {
                     Button {
                         state.userUpdatePreset(preset)
                     } label: {
-                        Pill(icon: "arrow.triangle.2.circlepath", title: "Update",
+                        Pill(icon: "square.and.arrow.down", title: "Save modified",
                              fill: Theme.muteActive, foreground: .white, size: .row)
                     }
                     .buttonStyle(.pill)

@@ -15,7 +15,7 @@ struct MenuBarIcon: View {
 
     var body: some View {
         Image(nsImage: Self.image(
-            symbol: state.isConnected && state.masterMuted ? "speaker.slash" : "slider.vertical.3",
+            symbol: state.isConnected && state.masterMuted ? "speaker.slash.fill" : "slider.vertical.3",
             dimmed: !state.isConnected
         ))
         .onAppear { AppController.shared.openWindowAction = openWindow }
@@ -25,7 +25,9 @@ struct MenuBarIcon: View {
     /// SwiftUI's `.opacity` has no effect there; dimming has to be baked
     /// into the image itself.
     private static func image(symbol: String, dimmed: Bool) -> NSImage {
-        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        // Semibold: at regular weight the thin slider strokes look grey
+        // beside the system's own status icons.
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
         guard let base = NSImage(systemSymbolName: symbol, accessibilityDescription: "Scarlett MixControl")?
             .withSymbolConfiguration(config) else { return NSImage() }
         guard dimmed else {
@@ -148,7 +150,8 @@ struct MenuBarPanel: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            masterMuteButton
+            MasterMuteButton(state: state)
+                .disabled(!state.isConnected)
             Spacer()
             Button {
                 AppController.shared.showMainWindow()
@@ -179,22 +182,6 @@ struct MenuBarPanel: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-    }
-
-    private var masterMuteButton: some View {
-        let muted = state.masterMuted
-        return Button {
-            state.userSetMasterMute(!muted)
-        } label: {
-            Pill(icon: muted ? "speaker.slash.fill" : "speaker.wave.2",
-                 title: muted ? "Master muted" : "Mute all",
-                 fill: muted ? Theme.muteActive : Theme.panelRaised,
-                 foreground: muted ? .white : Theme.textSecondary)
-        }
-        .buttonStyle(.pill)
-        .fixedSize()
-        .disabled(!state.isConnected)
-        .help("Mute every output bus on the device.")
     }
 }
 
