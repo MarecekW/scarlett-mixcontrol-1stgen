@@ -13,6 +13,7 @@ final class AppController {
     static let mainWindowID = "main"
 
     private static let showInDockKey   = "scarlett.app.showInDock.v1"
+    private static let showInMenuBarKey = "scarlett.app.showInMenuBar.v1"
     private static let hasLaunchedKey  = "scarlett.app.hasLaunched.v1"
 
     /// Whether the app has a Dock icon — and with it a Cmd+Tab entry and the
@@ -22,6 +23,18 @@ final class AppController {
             guard showInDock != oldValue else { return }
             UserDefaults.standard.set(showInDock, forKey: Self.showInDockKey)
             applyActivationPolicy()
+            // One of the two always stays, or there'd be no way back.
+            if !showInDock { showInMenuBar = true }
+        }
+    }
+
+    /// Whether the menu bar icon (and with it the panel) is shown.  Also
+    /// turned off by Cmd-dragging the icon out of the menu bar.
+    var showInMenuBar: Bool {
+        didSet {
+            guard showInMenuBar != oldValue else { return }
+            UserDefaults.standard.set(showInMenuBar, forKey: Self.showInMenuBarKey)
+            if !showInMenuBar { showInDock = true }
         }
     }
 
@@ -45,7 +58,11 @@ final class AppController {
     @ObservationIgnored private var closeWindowOnAttach = false
 
     private init() {
-        showInDock = UserDefaults.standard.object(forKey: Self.showInDockKey) as? Bool ?? true
+        let defaults = UserDefaults.standard
+        let dock = defaults.object(forKey: Self.showInDockKey) as? Bool ?? true
+        let menuBar = defaults.object(forKey: Self.showInMenuBarKey) as? Bool ?? true
+        showInDock = dock || !menuBar
+        showInMenuBar = menuBar
     }
 
     // MARK: - Launch

@@ -9,13 +9,25 @@ struct SettingsView: View {
     @Bindable private var app = AppController.shared
     @State private var loginItem = LoginItem()
 
+    private var dockCaption: String {
+        switch (app.showInMenuBar, app.showInDock) {
+        case (true, true):
+            return "Closing the mixer window keeps the app running in the menu bar."
+        case (true, false):
+            return "The app lives in the menu bar only — no Dock icon, no Cmd+Tab entry. Open the mixer from the menu bar panel."
+        default:
+            return "No menu bar icon or panel. Closing the mixer window keeps the app running; click its Dock icon to bring the mixer back. One of the two always stays on."
+        }
+    }
+
     var body: some View {
         Form {
             Section {
+                Toggle("Show in menu bar", isOn: $app.showInMenuBar)
+                    .disabled(!app.showInDock)
                 Toggle("Show in Dock", isOn: $app.showInDock)
-                Text(app.showInDock
-                     ? "Closing the mixer window keeps the app running in the menu bar."
-                     : "The app lives in the menu bar only — no Dock icon, no Cmd+Tab entry. Open the mixer from the menu bar panel.")
+                    .disabled(!app.showInMenuBar)
+                Text(dockCaption)
                     .font(.caption)
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

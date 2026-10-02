@@ -87,9 +87,9 @@ struct ScarlettApp: App {
             SettingsView()
         }
 
-        // Always present: with the Dock icon hidden it's the only way back
-        // to the app.
-        MenuBarExtra {
+        // Can be hidden in Settings, but never together with the Dock
+        // icon: one of them is the way back to the app.
+        MenuBarExtra(isInserted: Bindable(AppController.shared).showInMenuBar) {
             MenuBarPanel(state: state)
         } label: {
             MenuBarIcon(state: state)
