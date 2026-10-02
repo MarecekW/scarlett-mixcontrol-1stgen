@@ -8,6 +8,7 @@ import ServiceManagement
 struct SettingsView: View {
     @Bindable private var app = AppController.shared
     @State private var loginItem = LoginItem()
+    private var updates = UpdateChecker.shared
 
     private var dockCaption: String {
         switch (app.showInMenuBar, app.showInDock) {
@@ -67,6 +68,18 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(Theme.textSecondary)
                 }
+                if let update = updates.availableUpdate {
+                    Link(destination: update.url) {
+                        Label {
+                            Text("Update available: v\(update.version)")
+                        } icon: {
+                            Image(systemName: "circle.fill")
+                                .font(.system(size: 7))
+                                .foregroundStyle(Theme.failure)
+                        }
+                    }
+                    .help("Open the release page on GitHub")
+                }
                 Link(destination: AppInfo.repositoryURL) {
                     Label("View on GitHub", systemImage: "arrow.up.right.square")
                 }
@@ -82,6 +95,7 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             loginItem.refresh()
         }
+        .onAppear { updates.checkIfNeeded() }
     }
 }
 

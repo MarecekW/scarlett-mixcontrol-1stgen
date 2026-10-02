@@ -163,6 +163,9 @@ struct MenuBarPanel: View {
 
             Menu {
                 Button("Settings…") { AppController.shared.showSettings(openSettings) }
+                if let update = UpdateChecker.shared.availableUpdate {
+                    Link("Update available: v\(update.version)…", destination: update.url)
+                }
                 Divider()
                 Button("Quit Scarlett MixControl") { AppController.shared.quit() }
             } label: {
@@ -172,6 +175,7 @@ struct MenuBarPanel: View {
                     .frame(width: 26, height: 22)
                     .background(Theme.panelRaised)
                     .clipShape(RoundedRectangle(cornerRadius: PillSize.toolbar.cornerRadius))
+                    .updateDot()
             }
             .menuStyle(.button)
             .buttonStyle(.pill)

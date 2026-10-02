@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Activation policy (Dock icon or menu bar only) and whether the
         // mixer window stays open at launch.
         AppController.shared.finishLaunching()
+        UpdateChecker.shared.checkIfNeeded()
 
         // Runtime icon comes from Contents/Resources/AppIcon.icns (CFBundleIconFile).
         // No NSApp.applicationIconImage override — avoids lockFocus drawing and

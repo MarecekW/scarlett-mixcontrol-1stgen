@@ -286,3 +286,27 @@ struct MasterMuteButton: View {
         .help("Mute every output bus on the device.")
     }
 }
+
+// MARK: - Update dot
+
+/// A red dot on a Settings button while a newer release is available — the
+/// details are in Settings → About.
+struct UpdateDot: ViewModifier {
+    private var updates = UpdateChecker.shared
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .topTrailing) {
+            if updates.availableUpdate != nil {
+                Circle()
+                    .fill(Theme.failure)
+                    .frame(width: 6, height: 6)
+                    .offset(x: 2, y: -2)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+}
+
+extension View {
+    func updateDot() -> some View { modifier(UpdateDot()) }
+}

@@ -196,6 +196,7 @@ struct ContentView: View {
         let settings = sidebarIconButton("gearshape", help: "Settings") {
             AppController.shared.showSettings(openSettings)
         }
+        .updateDot()
         let quit = sidebarIconButton("power", help: "Quit Scarlett MixControl") {
             confirmQuit = true
         }
