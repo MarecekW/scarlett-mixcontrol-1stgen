@@ -292,10 +292,9 @@ struct StripMeter: View {
 
 /// The strip's readout row, DAW style: the fader's level on the left (under
 /// the fader) and the meter's max peak since the last reset on the right
-/// (under the meter).  Click the max peak to reset it; it turns red at
-/// 0 dB or above ("-0.0" is just under full scale, not a clip).  Reads the
-/// peaks itself, so 20 Hz meter updates re-render only this row, not the
-/// whole strip.
+/// (under the meter).  Click the max peak to reset it; at full scale it
+/// reads "CLIP" in red, held until the reset.  Reads the peaks itself, so
+/// 20 Hz meter updates re-render only this row, not the whole strip.
 @MainActor
 struct StripReadout: View {
     @Bindable var state: MixerState
@@ -314,8 +313,8 @@ struct StripReadout: View {
             cell(faderDb.map(DbAxis.format) ?? "",
                  color: faderMuted ? Theme.muteActive : Theme.textPrimary)
             Button(action: reset) {
-                cell(peak.isFinite && peak > DbAxis.meterFloor ? String(format: "%.1f", peak) : "−∞",
-                     color: peak >= 0 ? Theme.failure : Theme.textSecondary.opacity(0.8))
+                cell(DbAxis.formatPeak(peak),
+                     color: peak >= DbAxis.clip ? Theme.failure : Theme.textSecondary.opacity(0.8))
             }
             .buttonStyle(.plain)
             .help(resetHelp)
@@ -323,6 +322,17 @@ struct StripReadout: View {
     }
 
     private func cell(_ text: String, color: Color) -> some View {
+        ReadoutCell(text: text, color: color)
+    }
+}
+
+/// One field of a level / peak readout: monospaced figures on a dark
+/// inset — the mixer strips' readout row and the menu bar panel.
+struct ReadoutCell: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
         Text(text)
             .font(.system(size: 9, design: .monospaced))
             .foregroundStyle(color)

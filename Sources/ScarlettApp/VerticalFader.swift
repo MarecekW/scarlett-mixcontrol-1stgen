@@ -24,6 +24,10 @@ struct DbAxis {
     /// Quietest level meters and peak readouts show; below it is the
     /// device's noise floor (shown as -∞).
     static let meterFloor: Double = -60
+    /// Peaks at or above this count as a clip: 0.999 of full scale, the
+    /// threshold Focusrite's MixControl uses.  The device's meters top out
+    /// at full scale, so a level can reach 0 dBFS but never read above it.
+    static let clip: Double = 20 * log10(0.999)
 
     private static let levels: [Double] = [0, -6, -12, -18, -24, -30, -36, -48, -60, off]
     /// Relative height of the segment below breakpoint `db`: full steps
@@ -53,6 +57,13 @@ struct DbAxis {
         let tenths = (db * 10).rounded() / 10
         if tenths == 0 { return "0.0" }   // not "-0.0"
         return String(format: tenths > 0 ? "+%.1f" : "%.1f", tenths)
+    }
+
+    /// Readout for a max peak: "-12.3", "CLIP" at full scale, or "-∞"
+    /// below the meter floor.
+    static func formatPeak(_ db: Double) -> String {
+        if db >= clip { return "CLIP" }
+        return db.isFinite && db > meterFloor ? String(format: "%.1f", db) : "−∞"
     }
 
     /// Position of `db` from the bottom of the axis, 0...1.
@@ -209,6 +220,9 @@ struct DbScale: View {
 ///    `MixerState.peakDecayDbPerSecond`.
 ///  * `maxPeakDb` (red): all-time max since the last "Clear peaks" — useful
 ///    for gain staging over a long take.
+/// Above the track, in the fader knob's inset, sits an over LED that lights
+/// red while `maxPeakDb` is at full scale, so a clip stays visible until the
+/// max peak is reset.
 struct VerticalMeter: View {
     var db: Double
     var peakDb: Double = -.infinity
@@ -220,6 +234,7 @@ struct VerticalMeter: View {
     private let dbMax: Double = 0
     private let dbFloor = DbAxis.meterFloor
     private let width: CGFloat = 6
+    private let ledHeight: CGFloat = 4
 
     var body: some View {
         // Height comes from `\.faderHeight` — no GeometryReader needed.
@@ -233,6 +248,11 @@ struct VerticalMeter: View {
         let stop = { (db: Double) in (axis.y(db, height: height) - topY) / trackHeight }
 
         return ZStack(alignment: .top) {
+            Rectangle()
+                .fill(maxPeakDb >= DbAxis.clip ? Theme.meterHigh : Theme.faderTrack)
+                .frame(width: width, height: ledHeight)
+                .offset(y: topY - ledHeight - 2)
+
             Rectangle()
                 .fill(Theme.faderTrack)
                 .frame(width: width, height: trackHeight)

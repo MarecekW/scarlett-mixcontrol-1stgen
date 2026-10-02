@@ -128,6 +128,11 @@ final class MixerState {
     /// Monitor — can be hidden; the Outputs menu brings them back.
     var visiblePairLabels: Set<String> = []
 
+    /// Which output pairs (by `PhysicalOutput.pairLabel`) get a slider in
+    /// the menu bar panel.  Persisted per device.  Only pairs with a gain
+    /// stage are eligible — digital outs have no volume to set.
+    var menuBarPairLabels: Set<String> = []
+
     // Input switches — defaults are conservative (line / lo). Not pushed on launch.
     var impedance1: Impedance = .line
     var impedance2: Impedance = .line
@@ -165,6 +170,26 @@ final class MixerState {
     /// profile order.
     var visibleOutputGroups: [(label: String, outputs: [PhysicalOutput])] {
         physicalOutputGroups.filter { visiblePairLabels.contains($0.label) }
+    }
+
+    /// Labels of the output pairs that can have a volume slider in the
+    /// menu bar panel: those with a gain stage (always both sides — gain
+    /// stages cover a run of whole pairs from the first output).
+    private static func menuBarEligibleLabels(for profile: DeviceProfile) -> Set<String> {
+        Set(profile.physicalOutputs
+            .filter { profile.hasGainStage(wValue: $0.wValue) }
+            .map(\.pairLabel))
+    }
+
+    /// Output pairs that can have a volume slider in the menu bar panel.
+    var menuBarEligibleGroups: [(label: String, outputs: [PhysicalOutput])] {
+        let eligible = Self.menuBarEligibleLabels(for: profile)
+        return physicalOutputGroups.filter { eligible.contains($0.label) }
+    }
+
+    /// Output pairs shown in the menu bar panel, in profile order.
+    var menuBarOutputGroups: [(label: String, outputs: [PhysicalOutput])] {
+        menuBarEligibleGroups.filter { menuBarPairLabels.contains($0.label) }
     }
 
     /// The left output wValue of the first (Monitor) pair — the target of Dim.
@@ -216,6 +241,10 @@ final class MixerState {
     /// User-saved presets (full snapshots of routes + matrix + names + links).
     var presets: [ScarlettPreset] = []
 
+    /// The preset, snapshot file or factory default last loaded on this
+    /// device; nil once it's deleted, or before anything was loaded.
+    private(set) var loadedPreset: LoadedPreset?
+
     /// Set true once at startup if we detected a first launch (no
     /// UserDefaults state yet).  ContentView observes this and prompts
     /// the user with a choice between "apply default config" and "keep
@@ -239,6 +268,10 @@ final class MixerState {
         // matrix (100+ control transfers when a device is connected).
         Task { @MainActor in
             attemptConnect()
+            // Started here, not by a view: the app runs with no window open
+            // (menu bar panel only), and the window can be reopened — each
+            // reopen would otherwise start another polling loop.
+            startMeterPolling()
         }
     }
 
@@ -426,6 +459,8 @@ final class MixerState {
     private static let monitorMonoKeyPrefix   = "scarlett.monitorMono.v2"
     private static let firstLaunchDoneKeyPrefix = "scarlett.firstLaunchCompleted.v2"
     private static let visibleOutputsKeyPrefix  = "scarlett.visibleOutputs.v1"
+    private static let menuBarOutputsKeyPrefix  = "scarlett.menuBarOutputs.v1"
+    private static let loadedPresetKeyPrefix    = "scarlett.loadedPreset.v1"
 
     private func routesKey(for profile: DeviceProfile) -> String {
         "\(Self.routesKeyPrefix).\(profile.productID)"
@@ -447,6 +482,12 @@ final class MixerState {
     }
     private func visibleOutputsKey(for profile: DeviceProfile) -> String {
         "\(Self.visibleOutputsKeyPrefix).\(profile.productID)"
+    }
+    private func menuBarOutputsKey(for profile: DeviceProfile) -> String {
+        "\(Self.menuBarOutputsKeyPrefix).\(profile.productID)"
+    }
+    private func loadedPresetKey(for profile: DeviceProfile) -> String {
+        "\(Self.loadedPresetKeyPrefix).\(profile.productID)"
     }
 
     private func ensureMatrixSizing(for profile: DeviceProfile) {
@@ -477,6 +518,9 @@ final class MixerState {
             order.append(out.pairLabel)
         }
         visiblePairLabels = Set(order.prefix(2))
+        // Menu bar panel: every pair with a volume control, by default.
+        menuBarPairLabels = Self.menuBarEligibleLabels(for: profile)
+        loadedPreset = nil
 
         mixerSources = Array(repeating: .off, count: profile.matrixInputCount)
         mixerLevels = Array(
@@ -572,6 +616,12 @@ final class MixerState {
             if !filtered.isEmpty { visiblePairLabels = filtered }
         }
 
+        // Menu bar sliders — unlike the pinned strips, hiding every pair is
+        // a valid choice (the panel still has Mute all and presets).
+        if let saved = defaults.stringArray(forKey: menuBarOutputsKey(for: profile)) {
+            menuBarPairLabels = Set(saved).intersection(menuBarPairLabels)
+        }
+
         // Selected bus tab
         if let raw = defaults.object(forKey: busTabKey(for: profile)) as? UInt8,
            raw < UInt8(matrixBuses.count) {
@@ -611,6 +661,16 @@ final class MixerState {
         if let data = defaults.data(forKey: Self.presetsKey),
            let decoded = try? JSONDecoder().decode([ScarlettPreset].self, from: data) {
             presets = decoded
+        }
+
+        if let data = defaults.data(forKey: loadedPresetKey(for: profile)),
+           let loaded = try? JSONDecoder().decode(LoadedPreset.self, from: data) {
+            loadedPreset = loaded
+            // The preset may have been deleted while another device was
+            // connected (the list is shared).
+            if case .preset(let id) = loaded.source, !presets.contains(where: { $0.id == id }) {
+                setLoadedPreset(nil)
+            }
         }
 
         if !defaults.bool(forKey: firstLaunchDoneKey(for: profile)) {
@@ -773,7 +833,31 @@ final class MixerState {
 
     // MARK: - Meter polling
 
-    func startMeterPolling() {
+    @ObservationIgnored private var meterPollingStarted = false
+    /// Polling is backed off and the meters have been blanked.
+    @ObservationIgnored private var metersIdle = false
+
+    /// Mirror the hardware monitor section (18i20 front-panel knob +
+    /// DIM/MUTE).  One extra 4-byte transfer — cheap.
+    private func pollHardwareMonitor(_ dev: ScarlettDevice) {
+        guard profile.hasHardwareMonitorControls,
+              let hw = try? dev.getHardwareMonitorControls() else { return }
+        if let old = hwMonitor {
+            if old.dim != hw.dim {
+                logEvent(.info, "Monitor",
+                    hw.dim ? "Hardware Dim engaged" : "Hardware Dim released")
+            }
+            if old.mute != hw.mute {
+                logEvent(.info, "Monitor",
+                    hw.mute ? "Hardware Mute engaged" : "Hardware Mute released")
+            }
+        }
+        if hwMonitor != hw { hwMonitor = hw }
+    }
+
+    private func startMeterPolling() {
+        guard !meterPollingStarted else { return }
+        meterPollingStarted = true
         Task { @MainActor [weak self] in
             var lastTick = Date()
             while !Task.isCancelled {
@@ -787,19 +871,29 @@ final class MixerState {
                     continue
                 }
 
-                // Keep polling whenever the window is visible on screen —
-                // even if our app isn't the frontmost — so a user can park
-                // the meter window behind something else and still watch it.
-                // Only back off when the window is genuinely hidden:
-                // minimised to dock, or the app itself hidden (Cmd+H).
-                let windowVisible = NSApp.windows.contains { win in
-                    win.occlusionState.contains(.visible) && !win.isMiniaturized
-                }
-                if NSApp.isHidden || !windowVisible {
-                    try? await Task.sleep(nanoseconds: 500_000_000)   // 2 Hz
+                // Poll meters whenever the mixer window is visible on
+                // screen (even if our app isn't the frontmost, so a user can
+                // park it behind something else and still watch it) or the
+                // menu bar panel, which has meters too, is open.  Back off
+                // otherwise: the window closed, minimised to dock, or the
+                // app hidden (Cmd+H) — the usual state with the app in the
+                // menu bar.  Unplugging is still caught then: the Core Audio
+                // listener drops the connection without any polling.
+                let app = AppController.shared
+                let mixerOnScreen = !NSApp.isHidden && app.isMainWindowOnScreen
+                guard mixerOnScreen || app.isPanelOnScreen else {
+                    // Blank the meters, so opening the panel or the window
+                    // doesn't flash the level from when polling stopped.
+                    if !self.metersIdle {
+                        self.metersIdle = true
+                        self.peaks = .empty
+                        self.peaksHeld = .empty
+                    }
+                    try? await Task.sleep(nanoseconds: 500_000_000)
                     lastTick = Date()
                     continue
                 }
+                self.metersIdle = false
                 let now = Date()
                 let elapsed = now.timeIntervalSince(lastTick)
                 lastTick = now
@@ -873,23 +967,9 @@ final class MixerState {
                     }
                 }
 
-                // Mirror the hardware monitor section (18i20 front-panel
-                // knob + DIM/MUTE) every tick so the fader tracks the knob
-                // smoothly. One extra 4-byte transfer per poll — cheap.
-                if self.profile.hasHardwareMonitorControls,
-                   let hw = try? dev.getHardwareMonitorControls() {
-                    if let old = self.hwMonitor {
-                        if old.dim != hw.dim {
-                            self.logEvent(.info, "Monitor",
-                                hw.dim ? "Hardware Dim engaged" : "Hardware Dim released")
-                        }
-                        if old.mute != hw.mute {
-                            self.logEvent(.info, "Monitor",
-                                hw.mute ? "Hardware Mute engaged" : "Hardware Mute released")
-                        }
-                    }
-                    if self.hwMonitor != hw { self.hwMonitor = hw }
-                }
+                // Mirror the hardware monitor section every tick so the
+                // fader tracks the knob smoothly.
+                self.pollHardwareMonitor(dev)
 
                 // 83 ms ≈ 12 Hz. Each readPeaks() does 3 USB control transfers
                 // (inputs/DAW/mixer) which aren't free on macOS — kernel
@@ -937,6 +1017,17 @@ final class MixerState {
         }
         UserDefaults.standard.set(Array(visiblePairLabels),
                                   forKey: visibleOutputsKey(for: profile))
+    }
+
+    /// Show/hide an output pair's slider in the menu bar panel.
+    func userToggleMenuBarOutput(label: String) {
+        if menuBarPairLabels.contains(label) {
+            menuBarPairLabels.remove(label)
+        } else {
+            menuBarPairLabels.insert(label)
+        }
+        UserDefaults.standard.set(Array(menuBarPairLabels),
+                                  forKey: menuBarOutputsKey(for: profile))
     }
 
     func userSetMasterMute(_ muted: Bool) {
@@ -1370,23 +1461,7 @@ final class MixerState {
         let trimmed = ScarlettPreset.normalizedName(name)
         guard !trimmed.isEmpty else { return }
 
-        let snapshot = ScarlettPreset(
-            id: UUID(),
-            name: trimmed,
-            createdAt: Date(),
-            schemaVersion: ScarlettPreset.currentSchemaVersion,
-            productID: profile.productID,
-            routes: Dictionary(uniqueKeysWithValues:
-                snapshotRoutes().map { ($0.key, $0.value.rawValue) }),
-            mixerSources: mixerSources.map { $0.rawValue },
-            mixerLevels: mixerLevels,
-            mixerPans: mixerPans,
-            mixerMutes: mixerMutes,
-            mixerSolos: mixerSolos,
-            mixerNames: mixerNames,
-            linkedLefts: Array(linkedPairs),
-            selectedBus: UInt8(selectedBus.matrixIndex ?? 0)
-        )
+        let snapshot = currentSnapshot(named: trimmed)
 
         // Replace any preset with the same name; otherwise append.
         if let idx = presetIndex(named: trimmed, productID: profile.productID) {
@@ -1395,10 +1470,30 @@ final class MixerState {
             presets.append(snapshot)
         }
         savePresets()
+        // What's on the device is now exactly this preset.
+        markLoaded(.preset(snapshot.id))
+    }
+
+    /// Overwrite a saved preset with the current state, keeping its name
+    /// and its place in the list — "Save modified" on a modified preset.
+    func userUpdatePreset(_ preset: ScarlettPreset) {
+        guard let idx = presets.firstIndex(where: { $0.id == preset.id }) else { return }
+        var updated = currentSnapshot(named: preset.name, id: preset.id)
+        updated.createdAt = preset.createdAt
+        presets[idx] = updated
+        savePresets()
+        markLoaded(.preset(preset.id))
+        logEvent(.info, "Presets", "Updated preset \(preset.name)")
     }
 
     func userLoadPreset(_ preset: ScarlettPreset) throws {
-        guard let dev = device else { return }
+        try applyPreset(preset)
+        markLoaded(.preset(preset.id))
+    }
+
+    /// Push a preset's routes and matrix to the device.
+    private func applyPreset(_ preset: ScarlettPreset) throws {
+        guard let dev = device else { throw ScarlettPresetError.notConnected }
         try validate(preset, for: dev.profile)
 
         // Routes
@@ -1455,7 +1550,57 @@ final class MixerState {
     func userDeletePreset(_ preset: ScarlettPreset) {
         presets.removeAll { $0.id == preset.id }
         savePresets()
+        if loadedPreset?.source == .preset(preset.id) { setLoadedPreset(nil) }
     }
+
+    // MARK: - Loaded preset
+
+    /// The state a preset would capture right now.
+    private func currentPresetContent() -> PresetContent {
+        PresetContent(
+            routes: snapshotRoutes().mapValues(\.rawValue),
+            mixerSources: mixerSources.map(\.rawValue),
+            mixerLevels: mixerLevels,
+            mixerPans: mixerPans,
+            mixerMutes: mixerMutes,
+            mixerSolos: mixerSolos,
+            mixerNames: mixerNames,
+            linkedLefts: linkedPairs.sorted()
+        )
+    }
+
+    private func markLoaded(_ source: LoadedPreset.Source) {
+        setLoadedPreset(LoadedPreset(source: source, baseline: currentPresetContent()))
+    }
+
+    private func setLoadedPreset(_ loaded: LoadedPreset?) {
+        loadedPreset = loaded
+        let key = loadedPresetKey(for: profile)
+        if let loaded, let data = try? JSONEncoder().encode(loaded) {
+            UserDefaults.standard.set(data, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
+    /// Name of what was last loaded, as the Presets page and the menu bar
+    /// panel show it.
+    var loadedPresetName: String? {
+        switch loadedPreset?.source {
+        case .preset(let id):    return presets.first { $0.id == id }?.name
+        case .file(let name):    return name
+        case .factoryDefault:    return Self.factoryDefaultName
+        case nil:                return nil
+        }
+    }
+
+    /// The routing or matrix has changed since the last load.
+    var loadedPresetModified: Bool {
+        guard let loadedPreset else { return false }
+        return loadedPreset.baseline != currentPresetContent()
+    }
+
+    static let factoryDefaultName = "Factory default"
 
     /// The preset a name belongs to: presets are keyed by name + device,
     /// which is what Save overwrites by and rename refuses to duplicate.
@@ -1489,9 +1634,9 @@ final class MixerState {
     /// Build a snapshot of the current state in `ScarlettPreset` form.  The
     /// snapshot is identical in shape to what `userSavePreset` writes to
     /// the in-app list; the difference is just where it's persisted.
-    func currentSnapshot(named name: String) -> ScarlettPreset {
+    func currentSnapshot(named name: String, id: UUID = UUID()) -> ScarlettPreset {
         ScarlettPreset(
-            id: UUID(),
+            id: id,
             name: name,
             createdAt: Date(),
             schemaVersion: ScarlettPreset.currentSchemaVersion,
@@ -1527,7 +1672,8 @@ final class MixerState {
     func userImportSnapshot(from url: URL) throws {
         let data = try Data(contentsOf: url)
         let preset = try JSONDecoder().decode(ScarlettPreset.self, from: data)
-        try userLoadPreset(preset)
+        try applyPreset(preset)
+        markLoaded(.file(url.lastPathComponent))
         logEvent(.info, "Import", "Imported snapshot \(url.lastPathComponent)")
     }
 
@@ -1537,7 +1683,7 @@ final class MixerState {
     /// - Outputs (Monitor L/R + Phones L/R) routed direct from DAW 1/DAW 2 so
     ///   Mac audio is audible immediately.  S/PDIF outputs default Off.
     /// - Matrix mixer cleared: all levels 0 dB, all pans centered, no mutes/
-    ///   solos/links.
+    ///   solos/links, default channel names, the first bus in view.
     /// - Pinned DAW return (ch 14 + 15) re-established with DAW 1/2 sources
     ///   and hard L/R pans — ready to be brought up to mix DAW back through
     ///   the matrix if the user wants to.
@@ -1584,6 +1730,10 @@ final class MixerState {
         mixerMutes  = Array(repeating: false, count: 18)
         mixerSolos  = Array(repeating: false, count: 18)
         linkedPairs = []
+        // Everything else a preset sets: default ("Ch N") names, and the
+        // first mix bus in view.
+        mixerNames  = Array(repeating: "", count: 18)
+        selectedBus = matrixBuses.first ?? .m1
 
         // Seed the matrix with the device's physical inputs (analog, then
         // S/PDIF, then ADAT — in source order), skipping the two channels
@@ -1641,6 +1791,7 @@ final class MixerState {
         }
 
         saveMatrix()
+        markLoaded(.factoryDefault)
         let defaultedLabel = phonesWValues.isEmpty ? "Monitor" : "Monitor + Phones"
         let routeNote = useMixOutputs ? "\(defaultedLabel) = Mix M1/M2" : "\(defaultedLabel) = DAW 1/2"
         logEvent(.info, "Reset", "Default config applied (\(routeNote))")

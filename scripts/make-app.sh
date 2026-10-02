@@ -99,6 +99,9 @@ cat > "$CONTENTS/Info.plist" <<EOF
     <key>LSMinimumSystemVersion</key> <string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key>       <string>NSApplication</string>
+    <!-- Starts as a menu bar app; AppController switches to a regular app
+         with a Dock icon when "Show in Dock" is on (the default). -->
+    <key>LSUIElement</key>            <true/>
 </dict>
 </plist>
 EOF

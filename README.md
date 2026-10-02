@@ -48,6 +48,7 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
 | 📊  | **Live peak meters** — all 18 inputs + 6 mix buses + 6 DAW playbacks, with held peaks       |
 | 💾  | **Save to hardware** — persist mixer state to device flash, survives power cycle            |
 | 📁  | **Snapshots** — save / load full configurations as `.scmx` JSON files (⌘S / ⌘O)             |
+| 🔊  | **Menu bar panel** — output volumes, meters, mutes, presets and Mute all one click from the menu bar; optionally run without a Dock icon and launch at login |
 | 🔌  | **Connection resilience** — auto-reconnect on USB drops, clear status overlay               |
 
 <br/>
@@ -69,6 +70,16 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
       </td>
     </tr>
   </table>
+</div>
+
+<br/>
+
+## 🎚️ Menu bar panel
+
+The app can add a panel to the macOS menu bar, where you can set each output's volume, watch its meters, mute it and switch presets without opening the mixer. I built it because my speakers are on Line 3/4, which has no volume knob on the interface. Turn it on in Settings.
+
+<div align="center">
+  <img src="docs/screenshots/scr-mixcontrol-cc.png" alt="Menu bar panel — output volumes, meters and preset recall" width="360" />
 </div>
 
 <br/>

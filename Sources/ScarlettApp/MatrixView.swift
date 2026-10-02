@@ -63,8 +63,7 @@ struct MatrixMixerView: View {
             .fixedSize()
             .help("Reset the red max-peak tick on every strip.")
 
-            masterMuteButton
-            .help("Mute every output bus on the device.")
+            MasterMuteButton(state: state)
 
             FeedbackButton(action: { await state.saveToFlash() }) { phase in
                 FeedbackPill(phase: phase, icon: "internaldrive",
@@ -76,19 +75,34 @@ struct MatrixMixerView: View {
             .help("Persist current settings to device flash so they survive a power cycle.")
 
             outputsMenu
-                .help("Choose which output pairs are pinned as strips on the right.")
+                .help("Choose which output pairs are pinned as strips on the right, and which get a slider in the menu bar panel.")
         }
     }
 
-    /// Menu of output pairs — check to pin a pair's strip in the mixer.
+    /// Menu of output pairs — check to pin a pair's strip in the mixer, or
+    /// to give it a slider in the menu bar panel.
     private var outputsMenu: some View {
         Menu {
-            ForEach(state.physicalOutputGroups, id: \.label) { group in
-                Toggle(isOn: Binding(
-                    get: { state.visiblePairLabels.contains(group.label) },
-                    set: { _ in state.userToggleOutputPairVisible(label: group.label) }
-                )) {
-                    Text(group.label)
+            Section("Show in mixer") {
+                ForEach(state.physicalOutputGroups, id: \.label) { group in
+                    Toggle(isOn: Binding(
+                        get: { state.visiblePairLabels.contains(group.label) },
+                        set: { _ in state.userToggleOutputPairVisible(label: group.label) }
+                    )) {
+                        Text(group.label)
+                    }
+                }
+            }
+            if !state.menuBarEligibleGroups.isEmpty {
+                Section("Show in menu bar") {
+                    ForEach(state.menuBarEligibleGroups, id: \.label) { group in
+                        Toggle(isOn: Binding(
+                            get: { state.menuBarPairLabels.contains(group.label) },
+                            set: { _ in state.userToggleMenuBarOutput(label: group.label) }
+                        )) {
+                            Text(group.label)
+                        }
+                    }
                 }
             }
         } label: {
@@ -117,46 +131,6 @@ struct MatrixMixerView: View {
                 }
             }
         }
-    }
-
-    /// Toggles the master mute.  The label morphs between "Mute all" and
-    /// "Master muted".  The toggle runs inside `withAnimation` so the whole
-    /// toolbar re-lays out in step (width grows, neighbours slide); the icon
-    /// rides the leading edge and crossfades in place, and the two labels
-    /// are separate views that crossfade.
-    private var masterMuteButton: some View {
-        let muted = state.masterMuted
-        return Button {
-            withAnimation(.snappy(duration: 0.25)) {
-                state.userSetMasterMute(!muted)
-            }
-        } label: {
-            HStack(spacing: 5) {
-                // One fixed slot that travels with the button's leading edge;
-                // the two icons crossfade inside it.
-                ZStack {
-                    Image(systemName: "speaker.wave.2").opacity(muted ? 0 : 1)
-                    Image(systemName: "speaker.slash.fill").opacity(muted ? 1 : 0)
-                }
-                .font(PillSize.toolbar.iconFont)
-                .frame(width: 14)
-                Group {
-                    if muted {
-                        Text("Master muted")
-                    } else {
-                        Text("Mute all")
-                    }
-                }
-                .font(PillSize.toolbar.titleFont)
-                .lineLimit(1)
-                .transition(.opacity)
-            }
-            .pillChrome(.toolbar,
-                        fill: muted ? Theme.muteActive : Theme.panelRaised,
-                        foreground: muted ? .white : Theme.textSecondary)
-        }
-        .buttonStyle(.pill)
-        .fixedSize()
     }
 
     private var strips: some View {

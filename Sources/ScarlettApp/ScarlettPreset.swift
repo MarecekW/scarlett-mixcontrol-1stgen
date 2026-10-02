@@ -42,13 +42,47 @@ public struct ScarlettPreset: Codable, Identifiable, Hashable {
     public var selectedBus: UInt8
 }
 
+/// The part of the state a preset sets — what "modified since loading"
+/// compares.  Leaves out the bus in view, which a preset restores but
+/// switching tabs shouldn't count as a change.
+struct PresetContent: Codable, Equatable {
+    var routes: [UInt16: UInt8]
+    var mixerSources: [UInt8]
+    var mixerLevels: [[Double]]
+    var mixerPans: [[Double]]
+    var mixerMutes: [Bool]
+    var mixerSolos: [Bool]
+    var mixerNames: [String]
+    /// Sorted, so equal sets compare equal.
+    var linkedLefts: [Int]
+}
+
+/// What the user last loaded, and the state right after loading it.  The
+/// baseline is taken after the load rather than from the preset, since
+/// loading can adjust a preset (duplicate sources dropped, the pinned DAW
+/// channels re-claimed).
+struct LoadedPreset: Codable, Equatable {
+    enum Source: Codable, Equatable {
+        /// A saved preset, by id so a rename keeps the link.
+        case preset(UUID)
+        /// A snapshot file, by file name.
+        case file(String)
+        case factoryDefault
+    }
+    var source: Source
+    var baseline: PresetContent
+}
+
 enum ScarlettPresetError: LocalizedError {
+    case notConnected
     case unknownLegacyDevice
     case deviceMismatch(preset: String, connected: String)
     case invalid(String)
 
     var errorDescription: String? {
         switch self {
+        case .notConnected:
+            return "No Scarlett is connected."
         case .unknownLegacyDevice:
             return "This legacy preset does not contain enough information to identify its Scarlett model."
         case .deviceMismatch(let preset, let connected):

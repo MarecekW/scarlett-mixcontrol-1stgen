@@ -11,6 +11,7 @@ enum AppInfo {
     static var displayVersion: String {
         version.first?.isNumber == true ? "v\(version)" : version
     }
+    static let repositoryURL = URL(string: "https://github.com/MarecekW/scarlett-mixcontrol-1stgen")!
 }
 
 /// Pixel-exact section heights shared by every strip in the mixer (channel,

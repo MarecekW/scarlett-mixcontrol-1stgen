@@ -35,7 +35,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .mixer:   return "slider.vertical.3"
         case .routing: return "arrow.triangle.branch"
         case .presets: return "bookmark"
-        case .device:  return "gearshape"
+        case .device:  return "cpu"
         }
     }
 }
@@ -45,6 +45,9 @@ struct ContentView: View {
     @Bindable var state: MixerState
     @State private var tab: AppTab = .mixer
     @State private var sidebarCollapsed: Bool = false
+    @State private var confirmQuit = false
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         ZStack {
@@ -71,7 +74,16 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .task { state.startMeterPolling() }
+        .onAppear { AppController.shared.openWindowAction = openWindow }
+        // The sidebar's power button sits by the Settings gear, so it
+        // asks first; Cmd+Q and the panel's Quit item don't.
+        .confirmationDialog("Quit Scarlett MixControl?", isPresented: $confirmQuit,
+                            titleVisibility: .visible) {
+            Button("Quit", role: .destructive) { AppController.shared.quit() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The interface keeps its current mix; the app's controls go away until you open it again.")
+        }
     }
 
     /// Show the first-launch dialog only when the device is actually
@@ -151,6 +163,8 @@ struct ContentView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(state.syncLocked ? .green : .orange)
                     .help(state.syncLocked ? "Clock locked" : "No clock lock")
+                appButtons(vertical: true)
+                    .padding(.top, 4)
             }
             .frame(maxWidth: .infinity)
             .padding(.bottom, 16)
@@ -165,11 +179,47 @@ struct ContentView: View {
                     .font(.caption2)
                     .foregroundStyle(Theme.textSecondary.opacity(0.7))
                     .padding(.top, 4)
+                appButtons(vertical: false)
+                    .padding(.top, 4)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// Settings and Quit.  With the Dock icon hidden the app has no top
+    /// menu bar, so these are the in-window way to reach them.  Kept well
+    /// apart so a slip off Settings doesn't quit the app.
+    @ViewBuilder
+    private func appButtons(vertical: Bool) -> some View {
+        let settings = sidebarIconButton("gearshape", help: "Settings") {
+            AppController.shared.showSettings(openSettings)
+        }
+        .updateDot()
+        let quit = sidebarIconButton("power", help: "Quit Scarlett MixControl") {
+            confirmQuit = true
+        }
+        if vertical {
+            VStack(spacing: 14) { settings; quit }
+        } else {
+            HStack { settings; Spacer(minLength: 0); quit }
+        }
+    }
+
+    private func sidebarIconButton(_ symbol: String, help: String,
+                                   action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(width: 22, height: 20)
+                .background(Theme.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+        }
+        .buttonStyle(.pill)
+        .help(help)
+        .accessibilityLabel(help)
     }
 
     private var connectionIcon: String {
@@ -303,7 +353,12 @@ struct MixerPaneView: View {
         let fixed = contentHeight - faderHeight
         let range = StripLayout.faderHeightRange
         let fitted = min(max(viewportHeight - fixed, range.lowerBound), range.upperBound)
-        if abs(fitted - faderHeight) >= 1 { faderHeight = fitted.rounded(.down) }
+        // Whole points, rounded down so the page never ends up a fraction
+        // taller than the window — which shows a scroll bar.  (Skipping
+        // changes under a point kept a too-tall height when the window
+        // shrank by less than that.)
+        let target = fitted.rounded(.down)
+        if target != faderHeight { faderHeight = target }
     }
 }
 
@@ -441,6 +496,7 @@ extension RoutingView {
 @MainActor
 struct DeviceView: View {
     @Bindable var state: MixerState
+    @State private var confirmReset = false
 
     private func compatRow(symbol: String, color: Color, text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -537,9 +593,9 @@ struct DeviceView: View {
                             .help("Re-read the matrix state (sources + cell gains) from the device. Useful if another tool changed the device behind the app's back, or after a power cycle. Routing isn't refreshed — the firmware doesn't report routes back.")
                             .disabled(!state.isConnected)
                         Button("Reset routing & matrix", role: .destructive) {
-                            state.userResetRoutingAndMatrix()
+                            confirmReset = true
                         }
-                        .help("Clear every output route to Off and reset all matrix channels (levels 0 / pans centered / unmuted / unsoloed / unlinked). The pinned DAW return is re-applied automatically. Hardware switches, clock, sample rate and output volumes are untouched.")
+                        .help("Route Monitor and the headphone outputs to their default sources, turn every other output off, reset the matrix to its default layout (inputs seeded, levels 0, pans centered, no mutes / solos / links, default channel names) and the USB capture routes to their defaults, and turn Monitor mono off. The pinned DAW return is re-applied automatically. Hardware switches, clock, sample rate and output volumes are untouched.")
                         .disabled(!state.isConnected)
                         Spacer()
                     }
@@ -547,27 +603,8 @@ struct DeviceView: View {
 
                 EventLogPanel(state: state)
 
-                Panel(title: "About") {
+                Panel(title: "Compatibility") {
                     VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            Text("Scarlett MixControl — Community Edition")
-                                .font(.subheadline.bold())
-                                .foregroundStyle(Theme.textPrimary)
-                            Text(AppInfo.displayVersion)
-                                .font(.subheadline.monospacedDigit())
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                        Text("A community replacement for Focusrite's discontinued MixControl, which still launches on modern macOS but no longer detects the hardware.")
-                            .font(.caption).foregroundStyle(Theme.textSecondary)
-                        Text("Built by @MarecekW.")
-                            .font(.caption).foregroundStyle(Theme.textSecondary)
-                            .padding(.top, 4)
-
-                        Divider().padding(.vertical, 6)
-
-                        Text("Compatibility")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(Theme.textPrimary)
                         Text("This build drives every shipping 1st-generation USB Scarlett, with byte tables extracted from the original MixControl. The 8i6 and 18i8 are confirmed on hardware; the rest are beta and need an owner to verify.")
                             .font(.caption)
                             .foregroundStyle(Theme.textSecondary)
@@ -604,6 +641,7 @@ struct DeviceView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
+        .resetConfirmation(isPresented: $confirmReset, state: state)
     }
 
     private var hardwareRows: [InfoGrid.Row] {
@@ -925,3 +963,18 @@ struct Panel<Content: View>: View {
     }
 }
 
+extension View {
+    /// Confirmation before `userResetRoutingAndMatrix()`, which throws away
+    /// the current routing and mix — shared by the Device page and the
+    /// Presets page's Factory default.
+    func resetConfirmation(isPresented: Binding<Bool>, state: MixerState,
+                           title: String = "Reset routing & matrix?",
+                           confirm: String = "Reset") -> some View {
+        confirmationDialog(title, isPresented: isPresented, titleVisibility: .visible) {
+            Button(confirm, role: .destructive) { state.userResetRoutingAndMatrix() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Monitor and headphone outputs go back to their default sources, every other output is turned off, the matrix and USB capture routes return to their defaults, and channel names are cleared. Output volumes and hardware settings are kept.")
+        }
+    }
+}

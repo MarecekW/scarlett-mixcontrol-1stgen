@@ -237,3 +237,76 @@ struct ThemedMenuPicker<T: Hashable & Identifiable>: View {
         .opacity(isEnabled ? 1.0 : 0.4)
     }
 }
+
+// MARK: - Mute all
+
+/// Toggles the master mute — in the mixer's toolbar and the menu bar
+/// panel.  The label morphs between "Mute all" and "Master muted".  The
+/// toggle runs inside `withAnimation` so the surrounding row re-lays out in
+/// step (width grows, neighbours slide); the icon rides the leading edge
+/// and crossfades in place, and the two labels are separate views that
+/// crossfade.
+@MainActor
+struct MasterMuteButton: View {
+    @Bindable var state: MixerState
+
+    var body: some View {
+        let muted = state.masterMuted
+        Button {
+            withAnimation(.snappy(duration: 0.25)) {
+                state.userSetMasterMute(!muted)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                // One fixed slot that travels with the button's leading edge;
+                // the two icons crossfade inside it.
+                ZStack {
+                    Image(systemName: "speaker.wave.2").opacity(muted ? 0 : 1)
+                    Image(systemName: "speaker.slash.fill").opacity(muted ? 1 : 0)
+                }
+                .font(PillSize.toolbar.iconFont)
+                .frame(width: 14)
+                Group {
+                    if muted {
+                        Text("Master muted")
+                    } else {
+                        Text("Mute all")
+                    }
+                }
+                .font(PillSize.toolbar.titleFont)
+                .lineLimit(1)
+                .transition(.opacity)
+            }
+            .pillChrome(.toolbar,
+                        fill: muted ? Theme.muteActive : Theme.panelRaised,
+                        foreground: muted ? .white : Theme.textSecondary)
+        }
+        .buttonStyle(.pill)
+        .fixedSize()
+        .help("Mute every output bus on the device.")
+    }
+}
+
+// MARK: - Update dot
+
+/// A red dot on a Settings button while a newer release is available — the
+/// details are in Settings → About.
+struct UpdateDot: ViewModifier {
+    private var updates = UpdateChecker.shared
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .topTrailing) {
+            if updates.availableUpdate != nil {
+                Circle()
+                    .fill(Theme.failure)
+                    .frame(width: 6, height: 6)
+                    .offset(x: 2, y: -2)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+}
+
+extension View {
+    func updateDot() -> some View { modifier(UpdateDot()) }
+}
