@@ -176,12 +176,13 @@ struct MenuBarPanel: View {
                     .frame(width: 26, height: 22)
                     .background(Theme.panelRaised)
                     .clipShape(RoundedRectangle(cornerRadius: PillSize.toolbar.cornerRadius))
-                    .updateDot()
             }
             .menuStyle(.button)
             .buttonStyle(.pill)
             .menuIndicator(.hidden)
             .fixedSize()
+            // On the menu, not its label: the button clips its label.
+            .updateDot()
             .help("Settings and Quit")
             .accessibilityLabel("Settings")
         }
@@ -231,12 +232,14 @@ private struct MenuBarOutputRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        // Top-aligned: the label, mute and level line up with the fader,
+        // and the meter and its peak readout form a second line below.
+        HStack(alignment: .top, spacing: 8) {
             Text(label)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
-                .frame(width: 62, alignment: .leading)
+                .frame(width: 62, height: 20, alignment: .leading)
 
             Button {
                 let target = !muted
@@ -253,7 +256,7 @@ private struct MenuBarOutputRow: View {
             .help(muted ? "Unmute \(label)" : "Mute \(label)")
             .accessibilityLabel(muted ? "Unmute \(label)" : "Mute \(label)")
 
-            VStack(spacing: 1) {
+            VStack(spacing: 2) {
                 if mirrorsHardwarePot {
                     HorizontalFader(db: .constant(displayedDb), label: label)
                         .allowsHitTesting(false)
@@ -269,21 +272,27 @@ private struct MenuBarOutputRow: View {
                     }
                 }
                 PanelMeter(state: state, outputs: outputs)
-                    .padding(.horizontal, DbAxis.inset)
+                    .frame(height: PanelMeter.height)
+                    .padding(.horizontal, DbAxis.inset - 1)
             }
 
-            Group {
-                if let hardwareTag {
-                    Text(hardwareTag)
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(Theme.soloActive)
-                } else {
-                    Text(DbAxis.format(displayedDb))
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(muted ? Theme.textSecondary.opacity(0.6) : Theme.textSecondary)
+            VStack(alignment: .trailing, spacing: 2) {
+                Group {
+                    if let hardwareTag {
+                        Text(hardwareTag)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Theme.soloActive)
+                    } else {
+                        Text(DbAxis.format(displayedDb))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(muted ? Theme.textSecondary.opacity(0.6) : Theme.textPrimary)
+                    }
                 }
+                .lineLimit(1)
+                .frame(height: 20)
+                PanelPeakReadout(state: state, outputs: outputs)
+                    .frame(height: PanelMeter.height)
             }
-            .lineLimit(1)
             .frame(width: 42, alignment: .trailing)
         }
         .opacity(muted ? 0.75 : 1)
@@ -294,29 +303,44 @@ private struct MenuBarOutputRow: View {
 
 // MARK: - Meter
 
-/// Thin horizontal meter per side of an output pair, showing the level of
-/// whatever is routed to it — before the output's volume and mute, as on
-/// the mixer's output strips.  Its own view, so the 12 Hz meter updates
-/// redraw just the bars rather than the whole row.
+/// Sources feeding an output pair's sides, as routed.
+@MainActor
+private func routedSources(_ state: MixerState, _ outputs: [PhysicalOutput]) -> [MixBus] {
+    outputs.map { state.routes[$0.wValue] ?? .off }
+}
+
+/// Thin horizontal meter per side of an output pair, in a recessed well
+/// under the fader, showing the level of whatever is routed to it — before
+/// the output's volume and mute, as on the mixer's output strips.  A white
+/// tick holds recent peaks, a red one the max since it was last reset.  Its
+/// own view, so the 12 Hz meter updates redraw just the bars rather than
+/// the whole row.
 @MainActor
 private struct PanelMeter: View {
+    static let height: CGFloat = 9
+
     @Bindable var state: MixerState
     let outputs: [PhysicalOutput]
 
     var body: some View {
         VStack(spacing: 1) {
-            ForEach(outputs, id: \.wValue) { out in
-                let source = state.routes[out.wValue] ?? .off
+            ForEach(Array(routedSources(state, outputs).enumerated()), id: \.offset) { _, source in
                 Bar(db: state.peaks.level(for: source, profile: state.profile),
-                    peakDb: state.peaksHeld.level(for: source, profile: state.profile))
+                    peakDb: state.peaksHeld.level(for: source, profile: state.profile),
+                    maxDb: state.peaksMax.level(for: source, profile: state.profile))
             }
         }
+        .padding(1.5)
+        .frame(maxHeight: .infinity)
+        .background(Theme.readoutField)
+        .clipShape(RoundedRectangle(cornerRadius: 2))
         .accessibilityHidden(true)
     }
 
     private struct Bar: View {
         let db: Double
         let peakDb: Double
+        let maxDb: Double
         private let floor = DbAxis.meterFloor
 
         /// Position of a level along the bar, 0 at the floor to 1 at 0 dBFS.
@@ -329,7 +353,6 @@ private struct PanelMeter: View {
             GeometryReader { geo in
                 let width = geo.size.width
                 ZStack(alignment: .leading) {
-                    Rectangle().fill(Theme.faderTrack)
                     // Colour stops at the same levels as the mixer's meters.
                     Rectangle()
                         .fill(LinearGradient(
@@ -346,17 +369,46 @@ private struct PanelMeter: View {
                         .mask(alignment: .leading) {
                             Rectangle().frame(width: width * fraction(db))
                         }
-                    if peakDb > floor {
-                        Rectangle()
-                            .fill(Theme.textPrimary)
-                            .frame(width: 1.5)
-                            .offset(x: width * fraction(peakDb) - 0.75)
-                    }
+                    tick(peakDb, color: Theme.textPrimary, width: width)
+                    tick(maxDb, color: Theme.meterHigh, width: width)
                 }
             }
-            .frame(height: 2)
-            .clipShape(RoundedRectangle(cornerRadius: 1))
         }
+
+        @ViewBuilder
+        private func tick(_ db: Double, color: Color, width: CGFloat) -> some View {
+            if db > floor {
+                Rectangle()
+                    .fill(color)
+                    .frame(width: 1.5)
+                    .offset(x: min(width * fraction(db), width - 1.5))
+            }
+        }
+    }
+}
+
+/// The louder side's max peak since the last reset, under the level — as
+/// in the mixer's strip readouts: red at 0 dB or above, click to reset.
+@MainActor
+private struct PanelPeakReadout: View {
+    @Bindable var state: MixerState
+    let outputs: [PhysicalOutput]
+
+    var body: some View {
+        let sources = routedSources(state, outputs)
+        let peak = sources.map { state.peaksMax.level(for: $0, profile: state.profile) }.max() ?? -.infinity
+        Button {
+            for source in sources { state.clearMaxPeak(source) }
+        } label: {
+            Text(peak.isFinite && peak > DbAxis.meterFloor ? String(format: "%.1f", peak) : "−∞")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(peak >= 0 ? Theme.failure : Theme.textSecondary.opacity(0.8))
+                .lineLimit(1)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Max peak since the last reset. Click to reset.")
     }
 }
 
