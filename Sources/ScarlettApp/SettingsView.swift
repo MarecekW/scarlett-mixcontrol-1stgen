@@ -73,9 +73,11 @@ struct SettingsView: View {
                         Label {
                             Text("Update available: v\(update.version)")
                         } icon: {
-                            Image(systemName: "circle.fill")
-                                .font(.system(size: 7))
-                                .foregroundStyle(Theme.failure)
+                            // A shape rather than a small symbol, which
+                            // would sit on the text's baseline.
+                            Circle()
+                                .fill(Theme.failure)
+                                .frame(width: 7, height: 7)
                         }
                     }
                     .help("Open the release page on GitHub")
