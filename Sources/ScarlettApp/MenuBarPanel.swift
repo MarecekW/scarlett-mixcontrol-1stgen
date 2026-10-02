@@ -46,10 +46,9 @@ struct MenuBarIcon: View {
 
 // MARK: - MenuBarPanel
 
-/// Compact controls shown when the menu bar icon is clicked: output volumes
-/// and mutes, preset recall, Mute all.  No meters, so an open panel doesn't
-/// start meter polling — the main window is a click away for everything
-/// else.
+/// Compact controls shown when the menu bar icon is clicked: output volumes,
+/// mutes and meters, preset recall, Mute all.  Meters are polled only while
+/// the panel is open — the main window is a click away for everything else.
 @MainActor
 struct MenuBarPanel: View {
     @Bindable var state: MixerState
@@ -78,6 +77,7 @@ struct MenuBarPanel: View {
         .frame(width: 300)
         .background(Theme.panel)
         .preferredColorScheme(.dark)
+        .background(WindowAccessor { AppController.shared.attachPanelWindow($0) })
     }
 
     private var header: some View {
@@ -261,19 +261,23 @@ private struct MenuBarOutputRow: View {
             .help(muted ? "Unmute \(label)" : "Mute \(label)")
             .accessibilityLabel(muted ? "Unmute \(label)" : "Mute \(label)")
 
-            if mirrorsHardwarePot {
-                HorizontalFader(db: .constant(displayedDb), label: label)
-                    .allowsHitTesting(false)
-            } else {
-                HorizontalFader(db: Binding(
-                    get: { state.pairAtten(leftWValue: leftWValue) },
-                    set: { state.userSetPairAtten(leftWValue: leftWValue, db: $0) }
-                ), label: label)
-                .contextMenu {
-                    Button("Reset to 0 dB") {
-                        state.userSetPairAtten(leftWValue: leftWValue, db: 0)
+            VStack(spacing: 1) {
+                if mirrorsHardwarePot {
+                    HorizontalFader(db: .constant(displayedDb), label: label)
+                        .allowsHitTesting(false)
+                } else {
+                    HorizontalFader(db: Binding(
+                        get: { state.pairAtten(leftWValue: leftWValue) },
+                        set: { state.userSetPairAtten(leftWValue: leftWValue, db: $0) }
+                    ), label: label)
+                    .contextMenu {
+                        Button("Reset to 0 dB") {
+                            state.userSetPairAtten(leftWValue: leftWValue, db: 0)
+                        }
                     }
                 }
+                PanelMeter(state: state, outputs: outputs)
+                    .padding(.horizontal, DbAxis.inset)
             }
 
             Group {
@@ -293,6 +297,74 @@ private struct MenuBarOutputRow: View {
         .opacity(muted ? 0.75 : 1)
         // On the row: the read-only fader can't be hovered.
         .help(mirrorsHardwarePot ? "Monitor level is set by the front-panel knob on this device." : "")
+    }
+}
+
+// MARK: - Meter
+
+/// Thin horizontal meter per side of an output pair, showing the level of
+/// whatever is routed to it — before the output's volume and mute, as on
+/// the mixer's output strips.  Its own view, so the 12 Hz meter updates
+/// redraw just the bars rather than the whole row.
+@MainActor
+private struct PanelMeter: View {
+    @Bindable var state: MixerState
+    let outputs: [PhysicalOutput]
+
+    var body: some View {
+        VStack(spacing: 1) {
+            ForEach(outputs, id: \.wValue) { out in
+                let source = state.routes[out.wValue] ?? .off
+                Bar(db: state.peaks.level(for: source, profile: state.profile),
+                    peakDb: state.peaksHeld.level(for: source, profile: state.profile))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private struct Bar: View {
+        let db: Double
+        let peakDb: Double
+        private let floor = DbAxis.meterFloor
+
+        /// Position of a level along the bar, 0 at the floor to 1 at 0 dBFS.
+        private func fraction(_ db: Double) -> CGFloat {
+            guard db.isFinite else { return 0 }
+            return CGFloat(min(max((db - floor) / -floor, 0), 1))
+        }
+
+        var body: some View {
+            GeometryReader { geo in
+                let width = geo.size.width
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(Theme.faderTrack)
+                    // Colour stops at the same levels as the mixer's meters.
+                    Rectangle()
+                        .fill(LinearGradient(
+                            stops: [
+                                .init(color: Theme.meterLow,  location: 0),
+                                .init(color: Theme.meterLow,  location: fraction(-24)),
+                                .init(color: Theme.meterMid,  location: fraction(-18)),
+                                .init(color: Theme.meterMid,  location: fraction(-12)),
+                                .init(color: Theme.meterHigh, location: fraction(-6)),
+                                .init(color: Theme.meterHigh, location: 1),
+                            ],
+                            startPoint: .leading, endPoint: .trailing
+                        ))
+                        .mask(alignment: .leading) {
+                            Rectangle().frame(width: width * fraction(db))
+                        }
+                    if peakDb > floor {
+                        Rectangle()
+                            .fill(Theme.textPrimary)
+                            .frame(width: 1.5)
+                            .offset(x: width * fraction(peakDb) - 0.75)
+                    }
+                }
+            }
+            .frame(height: 2)
+            .clipShape(RoundedRectangle(cornerRadius: 1))
+        }
     }
 }
 

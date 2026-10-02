@@ -833,15 +833,6 @@ final class MixerState {
 
     // MARK: - Meter polling
 
-    /// The status item's own window (an `NSStatusBarWindow`, a private
-    /// class).  Matched by name and, should that ever change, by its
-    /// menu-bar-sized height — a false match would keep polling at full
-    /// rate with nothing on screen.
-    private static func isStatusItemWindow(_ win: NSWindow) -> Bool {
-        win.className.contains("StatusBarWindow")
-            || win.frame.height <= NSStatusBar.system.thickness
-    }
-
     @ObservationIgnored private var meterPollingStarted = false
 
     /// Mirror the hardware monitor section (18i20 front-panel knob +
@@ -879,22 +870,17 @@ final class MixerState {
                 }
 
                 // Poll meters whenever the mixer window is visible on
-                // screen — even if our app isn't the frontmost — so a user
-                // can park it behind something else and still watch it.
-                // Back off when it's closed, minimised to dock, or the app
-                // is hidden (Cmd+H) — the usual state with the app in the
+                // screen (even if our app isn't the frontmost, so a user can
+                // park it behind something else and still watch it) or the
+                // menu bar panel, which has meters too, is open.  Back off
+                // otherwise: the window closed, minimised to dock, or the
+                // app hidden (Cmd+H) — the usual state with the app in the
                 // menu bar.  Unplugging is still caught then: the Core Audio
                 // listener drops the connection without any polling.
-                if NSApp.isHidden || !AppController.shared.isMainWindowOnScreen {
-                    // The menu bar panel (or Settings) shows no meters, but
-                    // the panel's 18i20 Monitor fader mirrors the front-panel
-                    // knob, so keep reading that while it's open.
-                    let panelOpen = !NSApp.isHidden && NSApp.windows.contains { win in
-                        win.isVisible && win.occlusionState.contains(.visible)
-                            && !Self.isStatusItemWindow(win)
-                    }
-                    if panelOpen { self.pollHardwareMonitor(dev) }
-                    try? await Task.sleep(nanoseconds: panelOpen ? 250_000_000 : 500_000_000)
+                let app = AppController.shared
+                let mixerOnScreen = !NSApp.isHidden && app.isMainWindowOnScreen
+                guard mixerOnScreen || app.isPanelOnScreen else {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
                     lastTick = Date()
                     continue
                 }

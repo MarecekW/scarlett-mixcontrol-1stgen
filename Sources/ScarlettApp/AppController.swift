@@ -36,6 +36,9 @@ final class AppController {
     @ObservationIgnored private weak var mainWindow: NSWindow?
     /// The Settings window, recorded the same way.
     @ObservationIgnored private weak var settingsWindow: NSWindow?
+    /// The menu bar panel's window, which AppKit keeps and orders out
+    /// while the panel is closed.
+    @ObservationIgnored private weak var panelWindow: NSWindow?
 
     /// Set at launch when the app should start in the menu bar only; the
     /// window SwiftUI opens at launch is closed as soon as it attaches.
@@ -112,6 +115,17 @@ final class AppController {
         // Accessory apps aren't activated by opening a window; without this
         // the mixer comes up behind whatever app is in front.
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // MARK: - Menu bar panel
+
+    func attachPanelWindow(_ win: NSWindow) {
+        panelWindow = win
+    }
+
+    /// The menu bar panel is open — its meters are worth polling.
+    var isPanelOnScreen: Bool {
+        panelWindow?.isVisible ?? false
     }
 
     // MARK: - Settings window
