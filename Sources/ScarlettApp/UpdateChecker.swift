@@ -43,15 +43,17 @@ final class UpdateChecker {
         Task {
             while true {
                 try? await Task.sleep(for: .seconds(Self.minimumInterval))
-                checkIfNeeded()
+                // Forced: the last check finished a moment after this
+                // sleep began, so it's always just under the interval old.
+                checkIfNeeded(force: true)
             }
         }
     }
 
     /// Check unless one ran recently.  Failures (offline, rate limit) are
     /// silent: there's simply no update shown.
-    func checkIfNeeded() {
-        if let lastCheck, Date().timeIntervalSince(lastCheck) < Self.minimumInterval { return }
+    func checkIfNeeded(force: Bool = false) {
+        if !force, let lastCheck, Date().timeIntervalSince(lastCheck) < Self.minimumInterval { return }
         guard !checking else { return }
         checking = true
         Task {

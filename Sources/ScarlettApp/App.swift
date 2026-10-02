@@ -33,8 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // any Bundle.module access in packaged builds.
     }
 
-    // The menu bar panel keeps working with the window closed; only Quit
-    // ends the app.
+    // The app keeps running with the window closed (in the menu bar, or
+    // in the Dock with the icon hidden); only Quit ends it.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }

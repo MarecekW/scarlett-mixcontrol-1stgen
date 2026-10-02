@@ -83,7 +83,7 @@ In **Settings** (the ⚙ in the panel or the sidebar; also ⌘, while the Dock i
 - **Show in menu bar** — turn off to hide the menu bar icon and panel. It can't be off together with Show in Dock.
 - **Show in Dock** — turn off to run as a menu-bar-only utility: no Dock icon or ⌘Tab entry, and the app starts quietly in the menu bar. Reopening the app from Finder or Spotlight brings the mixer back.
 - **Launch at login** — start the app when you log in. With the Dock icon shown the mixer window opens at login too; turn Show in Dock off to start in the menu bar only.
-- **About** — the app version and a link to this repository.
+- **About** — the app version, a link to this repository, and "Update available" when GitHub has a newer release (checked at launch and every few hours; a dot on the ⚙ buttons points to it).
 
 <br/>
 
