@@ -409,6 +409,8 @@ private struct PanelPeakReadout: View {
         }
         .buttonStyle(.plain)
         .help("Max peak since the last reset. Click to reset.")
+        .accessibilityLabel("Max peak")
+        .accessibilityHint("Resets the max peak")
     }
 }
 
