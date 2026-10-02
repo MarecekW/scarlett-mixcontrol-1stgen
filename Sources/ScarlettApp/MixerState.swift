@@ -1683,7 +1683,7 @@ final class MixerState {
     /// - Outputs (Monitor L/R + Phones L/R) routed direct from DAW 1/DAW 2 so
     ///   Mac audio is audible immediately.  S/PDIF outputs default Off.
     /// - Matrix mixer cleared: all levels 0 dB, all pans centered, no mutes/
-    ///   solos/links.
+    ///   solos/links, default channel names, the first bus in view.
     /// - Pinned DAW return (ch 14 + 15) re-established with DAW 1/2 sources
     ///   and hard L/R pans — ready to be brought up to mix DAW back through
     ///   the matrix if the user wants to.
@@ -1734,7 +1734,6 @@ final class MixerState {
         // first mix bus in view.
         mixerNames  = Array(repeating: "", count: 18)
         selectedBus = matrixBuses.first ?? .m1
-        saveSelectedBus()
 
         // Seed the matrix with the device's physical inputs (analog, then
         // S/PDIF, then ADAT — in source order), skipping the two channels
