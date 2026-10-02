@@ -353,7 +353,12 @@ struct MixerPaneView: View {
         let fixed = contentHeight - faderHeight
         let range = StripLayout.faderHeightRange
         let fitted = min(max(viewportHeight - fixed, range.lowerBound), range.upperBound)
-        if abs(fitted - faderHeight) >= 1 { faderHeight = fitted.rounded(.down) }
+        // Whole points, rounded down so the page never ends up a fraction
+        // taller than the window — which shows a scroll bar.  (Skipping
+        // changes under a point kept a too-tall height when the window
+        // shrank by less than that.)
+        let target = fitted.rounded(.down)
+        if target != faderHeight { faderHeight = target }
     }
 }
 
