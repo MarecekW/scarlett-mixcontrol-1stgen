@@ -3,8 +3,9 @@ import Observation
 
 /// Looks up the latest GitHub release so About can offer it, and the
 /// Settings buttons can show a dot while one is available.  One small
-/// request to the GitHub API at launch and when Settings opens, at most
-/// every few hours; nothing is downloaded or installed.
+/// request to the GitHub API at launch, every few hours after, and when
+/// Settings opens (at most every few hours); nothing is downloaded or
+/// installed.
 @MainActor
 @Observable
 final class UpdateChecker {
@@ -33,6 +34,18 @@ final class UpdateChecker {
     var availableUpdate: Release? {
         guard let latest, Self.isNewer(latest.version, than: AppInfo.version) else { return nil }
         return latest
+    }
+
+    /// Check now, then again every few hours while the app runs — it can
+    /// sit in the menu bar for days.  Called once at launch.
+    func startPeriodicChecks() {
+        checkIfNeeded()
+        Task {
+            while true {
+                try? await Task.sleep(for: .seconds(Self.minimumInterval))
+                checkIfNeeded()
+            }
+        }
     }
 
     /// Check unless one ran recently.  Failures (offline, rate limit) are
@@ -74,9 +87,10 @@ final class UpdateChecker {
             let b = i < c.count ? c[i] : 0
             if a != b { return a > b }
         }
-        // Same version: only a pre-release of it is older.
-        let suffix = current.drop { $0 != "-" }.dropFirst()
-        return suffix.first?.isLetter == true
+        // Same version: only a pre-release of it is older — not a build
+        // after the tag ("-9-gabc1234") or one with local edits ("-dirty").
+        let suffix = current.drop { $0 != "-" }.dropFirst().lowercased()
+        return ["alpha", "beta", "rc", "pre"].contains { suffix.hasPrefix($0) }
     }
 
     private static func numericParts(_ version: String) -> [Int]? {
