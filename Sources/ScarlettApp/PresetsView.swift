@@ -37,27 +37,38 @@ struct PresetsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
-                Panel(title: "Save current state") {
-                    saveRow
-                    Text("Captures: output routing, matrix sources / gains / mutes / solos, channel names, stereo-link state, and which bus is in view. Output volumes (Monitor, Phones) are not included, so loading a preset never jumps your listening level. Existing presets with the same name are overwritten.")
-                        .font(.caption).foregroundStyle(Theme.textSecondary)
-                }
-                Panel(title: "Snapshot files") {
-                    HStack(spacing: 8) {
-                        Button { exportSnapshot(state: state) } label: {
-                            Pill(icon: "square.and.arrow.down", title: "Save snapshot…", size: .row)
+                // Two equal cards side by side, as tall as the taller one.
+                HStack(alignment: .top, spacing: 18) {
+                    Panel(title: "Save current state") {
+                        cardContent {
+                            saveRow
+                            Text("Saves routing, the matrix and channel names, but not output volumes, so loading a preset never changes your listening level. Saving under an existing name replaces that preset.")
+                                .font(.caption).foregroundStyle(Theme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .help("Captures output routing, matrix sources / gains / pans / mutes / solos, channel names, stereo-link state, and which bus is in view. Output volumes (Monitor, Phones) are not included.")
                         }
-                        .buttonStyle(.pill)
-                        .fixedSize()
-                        Button { importSnapshot(state: state) } label: {
-                            Pill(icon: "folder", title: "Open snapshot…", size: .row)
-                        }
-                        .buttonStyle(.pill)
-                        .fixedSize()
                     }
-                    Text("Save the current state to a .scmx file to back it up or move it to another Mac, or open one. With the Dock icon shown, also in the File menu (⌘S / ⌘O).")
-                        .font(.caption).foregroundStyle(Theme.textSecondary)
+                    Panel(title: "Snapshot files") {
+                        cardContent {
+                            HStack(spacing: 8) {
+                                Button { exportSnapshot(state: state) } label: {
+                                    Pill(icon: "square.and.arrow.down", title: "Save snapshot…", size: .row)
+                                }
+                                .buttonStyle(.pill)
+                                .fixedSize()
+                                Button { importSnapshot(state: state) } label: {
+                                    Pill(icon: "folder", title: "Open snapshot…", size: .row)
+                                }
+                                .buttonStyle(.pill)
+                                .fixedSize()
+                            }
+                            Text("Back up the current state to a .scmx file or move it to another Mac. With the Dock icon shown, also in the File menu (⌘S / ⌘O).")
+                                .font(.caption).foregroundStyle(Theme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 Panel(title: "Saved presets") {
                     if state.presets.isEmpty {
                         Text("No presets yet — save one above.")
@@ -108,6 +119,13 @@ struct PresetsView: View {
         }
     }
 
+    /// A card's body, stretched to fill its half of the row so both cards
+    /// share a width and height.
+    private func cardContent<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10, content: content)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("Presets").font(.title2).bold().foregroundStyle(Theme.textPrimary)
@@ -121,7 +139,6 @@ struct PresetsView: View {
         HStack(spacing: 10) {
             TextField("Preset name", text: $newPresetName)
                 .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 280)
                 .onSubmit { savePreset() }
 
             Button {
@@ -132,8 +149,6 @@ struct PresetsView: View {
             }
             .buttonStyle(.pill)
             .disabled(ScarlettPreset.normalizedName(newPresetName).isEmpty)
-
-            Spacer(minLength: 0)
         }
     }
 
