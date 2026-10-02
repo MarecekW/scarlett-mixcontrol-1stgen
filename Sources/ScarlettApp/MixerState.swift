@@ -1730,6 +1730,11 @@ final class MixerState {
         mixerMutes  = Array(repeating: false, count: 18)
         mixerSolos  = Array(repeating: false, count: 18)
         linkedPairs = []
+        // Everything else a preset sets: default ("Ch N") names, and the
+        // first mix bus in view.
+        mixerNames  = Array(repeating: "", count: 18)
+        selectedBus = matrixBuses.first ?? .m1
+        saveSelectedBus()
 
         // Seed the matrix with the device's physical inputs (analog, then
         // S/PDIF, then ADAT — in source order), skipping the two channels

@@ -595,7 +595,7 @@ struct DeviceView: View {
                         Button("Reset routing & matrix", role: .destructive) {
                             confirmReset = true
                         }
-                        .help("Route Monitor and the headphone outputs to their default sources, turn every other output off, reset the matrix to its default layout (inputs seeded, levels 0, pans centered, no mutes / solos / links) and the USB capture routes to their defaults, and turn Monitor mono off. The pinned DAW return is re-applied automatically. Hardware switches, clock, sample rate and output volumes are untouched.")
+                        .help("Route Monitor and the headphone outputs to their default sources, turn every other output off, reset the matrix to its default layout (inputs seeded, levels 0, pans centered, no mutes / solos / links, default channel names) and the USB capture routes to their defaults, and turn Monitor mono off. The pinned DAW return is re-applied automatically. Hardware switches, clock, sample rate and output volumes are untouched.")
                         .disabled(!state.isConnected)
                         Spacer()
                     }
@@ -974,7 +974,7 @@ extension View {
             Button(confirm, role: .destructive) { state.userResetRoutingAndMatrix() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Monitor and headphone outputs go back to their default sources, every other output is turned off, and the matrix and USB capture routes return to their defaults. Output volumes and hardware settings are kept.")
+            Text("Monitor and headphone outputs go back to their default sources, every other output is turned off, the matrix and USB capture routes return to their defaults, and channel names are cleared. Output volumes and hardware settings are kept.")
         }
     }
 }
