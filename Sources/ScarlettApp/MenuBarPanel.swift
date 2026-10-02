@@ -361,8 +361,9 @@ private struct HorizontalFader: View {
 
 // MARK: - Presets
 
-/// Preset recall: a menu of this device's presets.  Loading never changes
-/// output volumes (presets don't store them), so it's safe from here.
+/// Preset recall: a menu of this device's presets, titled with the one
+/// loaded and tagged once it's modified.  Loading never changes output
+/// volumes (presets don't store them), so it's safe from here.
 @MainActor
 private struct MenuBarPresetRow: View {
     @Bindable var state: MixerState
@@ -385,13 +386,19 @@ private struct MenuBarPresetRow: View {
 
             Menu {
                 ForEach(presets) { preset in
-                    Button(preset.name) { load(preset) }
+                    // A checkmark on the one that's loaded, as a picker would.
+                    Toggle(preset.name, isOn: Binding(
+                        get: { state.loadedPreset?.source == .preset(preset.id) },
+                        set: { _ in load(preset) }
+                    ))
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(presets.isEmpty ? "No presets" : "Load…")
+                    Text(menuTitle)
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     Spacer(minLength: 2)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 7, weight: .semibold))
@@ -399,7 +406,7 @@ private struct MenuBarPresetRow: View {
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .frame(width: 110)
+                .frame(width: 130)
                 .background(Theme.panelRaised)
                 .clipShape(RoundedRectangle(cornerRadius: 3))
             }
@@ -417,9 +424,17 @@ private struct MenuBarPresetRow: View {
                     .foregroundStyle(status.ok ? Theme.success : Theme.failure)
                     .lineLimit(1)
                     .help(status.detail)
+            } else if state.loadedPresetName != nil && state.loadedPresetModified {
+                LoadedBadge(modified: true)
             }
             Spacer(minLength: 0)
         }
+    }
+
+    /// The loaded preset (or snapshot / factory default), else a prompt.
+    private var menuTitle: String {
+        if let name = state.loadedPresetName { return name }
+        return presets.isEmpty ? "No presets" : "Load…"
     }
 
     private func load(_ preset: ScarlettPreset) {

@@ -35,7 +35,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .mixer:   return "slider.vertical.3"
         case .routing: return "arrow.triangle.branch"
         case .presets: return "bookmark"
-        case .device:  return "cable.connector"
+        case .device:  return "hifireceiver"
         }
     }
 }

@@ -241,6 +241,10 @@ final class MixerState {
     /// User-saved presets (full snapshots of routes + matrix + names + links).
     var presets: [ScarlettPreset] = []
 
+    /// The preset, snapshot file or factory default last loaded on this
+    /// device; nil once it's deleted, or before anything was loaded.
+    private(set) var loadedPreset: LoadedPreset?
+
     /// Set true once at startup if we detected a first launch (no
     /// UserDefaults state yet).  ContentView observes this and prompts
     /// the user with a choice between "apply default config" and "keep
@@ -456,6 +460,7 @@ final class MixerState {
     private static let firstLaunchDoneKeyPrefix = "scarlett.firstLaunchCompleted.v2"
     private static let visibleOutputsKeyPrefix  = "scarlett.visibleOutputs.v1"
     private static let menuBarOutputsKeyPrefix  = "scarlett.menuBarOutputs.v1"
+    private static let loadedPresetKeyPrefix    = "scarlett.loadedPreset.v1"
 
     private func routesKey(for profile: DeviceProfile) -> String {
         "\(Self.routesKeyPrefix).\(profile.productID)"
@@ -480,6 +485,9 @@ final class MixerState {
     }
     private func menuBarOutputsKey(for profile: DeviceProfile) -> String {
         "\(Self.menuBarOutputsKeyPrefix).\(profile.productID)"
+    }
+    private func loadedPresetKey(for profile: DeviceProfile) -> String {
+        "\(Self.loadedPresetKeyPrefix).\(profile.productID)"
     }
 
     private func ensureMatrixSizing(for profile: DeviceProfile) {
@@ -512,6 +520,7 @@ final class MixerState {
         visiblePairLabels = Set(order.prefix(2))
         // Menu bar panel: every pair with a volume control, by default.
         menuBarPairLabels = Self.menuBarEligibleLabels(for: profile)
+        loadedPreset = nil
 
         mixerSources = Array(repeating: .off, count: profile.matrixInputCount)
         mixerLevels = Array(
@@ -652,6 +661,16 @@ final class MixerState {
         if let data = defaults.data(forKey: Self.presetsKey),
            let decoded = try? JSONDecoder().decode([ScarlettPreset].self, from: data) {
             presets = decoded
+        }
+
+        if let data = defaults.data(forKey: loadedPresetKey(for: profile)),
+           let loaded = try? JSONDecoder().decode(LoadedPreset.self, from: data) {
+            loadedPreset = loaded
+            // The preset may have been deleted while another device was
+            // connected (the list is shared).
+            if case .preset(let id) = loaded.source, !presets.contains(where: { $0.id == id }) {
+                setLoadedPreset(nil)
+            }
         }
 
         if !defaults.bool(forKey: firstLaunchDoneKey(for: profile)) {
@@ -1446,23 +1465,7 @@ final class MixerState {
         let trimmed = ScarlettPreset.normalizedName(name)
         guard !trimmed.isEmpty else { return }
 
-        let snapshot = ScarlettPreset(
-            id: UUID(),
-            name: trimmed,
-            createdAt: Date(),
-            schemaVersion: ScarlettPreset.currentSchemaVersion,
-            productID: profile.productID,
-            routes: Dictionary(uniqueKeysWithValues:
-                snapshotRoutes().map { ($0.key, $0.value.rawValue) }),
-            mixerSources: mixerSources.map { $0.rawValue },
-            mixerLevels: mixerLevels,
-            mixerPans: mixerPans,
-            mixerMutes: mixerMutes,
-            mixerSolos: mixerSolos,
-            mixerNames: mixerNames,
-            linkedLefts: Array(linkedPairs),
-            selectedBus: UInt8(selectedBus.matrixIndex ?? 0)
-        )
+        let snapshot = currentSnapshot(named: trimmed)
 
         // Replace any preset with the same name; otherwise append.
         if let idx = presetIndex(named: trimmed, productID: profile.productID) {
@@ -1471,10 +1474,28 @@ final class MixerState {
             presets.append(snapshot)
         }
         savePresets()
+        // What's on the device is now exactly this preset.
+        markLoaded(.preset(snapshot.id))
+    }
+
+    /// Overwrite a saved preset with the current state, keeping its name
+    /// and its place in the list — the "Update" for a modified preset.
+    func userUpdatePreset(_ preset: ScarlettPreset) {
+        guard let idx = presets.firstIndex(where: { $0.id == preset.id }) else { return }
+        presets[idx] = currentSnapshot(named: preset.name, id: preset.id)
+        savePresets()
+        markLoaded(.preset(preset.id))
+        logEvent(.info, "Presets", "Updated preset \(preset.name)")
     }
 
     func userLoadPreset(_ preset: ScarlettPreset) throws {
-        guard let dev = device else { return }
+        try applyPreset(preset)
+        markLoaded(.preset(preset.id))
+    }
+
+    /// Push a preset's routes and matrix to the device.
+    private func applyPreset(_ preset: ScarlettPreset) throws {
+        guard let dev = device else { throw ScarlettPresetError.notConnected }
         try validate(preset, for: dev.profile)
 
         // Routes
@@ -1531,7 +1552,57 @@ final class MixerState {
     func userDeletePreset(_ preset: ScarlettPreset) {
         presets.removeAll { $0.id == preset.id }
         savePresets()
+        if loadedPreset?.source == .preset(preset.id) { setLoadedPreset(nil) }
     }
+
+    // MARK: - Loaded preset
+
+    /// The state a preset would capture right now.
+    private func currentPresetContent() -> PresetContent {
+        PresetContent(
+            routes: snapshotRoutes().mapValues(\.rawValue),
+            mixerSources: mixerSources.map(\.rawValue),
+            mixerLevels: mixerLevels,
+            mixerPans: mixerPans,
+            mixerMutes: mixerMutes,
+            mixerSolos: mixerSolos,
+            mixerNames: mixerNames,
+            linkedLefts: linkedPairs.sorted()
+        )
+    }
+
+    private func markLoaded(_ source: LoadedPreset.Source) {
+        setLoadedPreset(LoadedPreset(source: source, baseline: currentPresetContent()))
+    }
+
+    private func setLoadedPreset(_ loaded: LoadedPreset?) {
+        loadedPreset = loaded
+        let key = loadedPresetKey(for: profile)
+        if let loaded, let data = try? JSONEncoder().encode(loaded) {
+            UserDefaults.standard.set(data, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
+    /// Name of what was last loaded, as the Presets page and the menu bar
+    /// panel show it.
+    var loadedPresetName: String? {
+        switch loadedPreset?.source {
+        case .preset(let id):    return presets.first { $0.id == id }?.name
+        case .file(let name):    return name
+        case .factoryDefault:    return Self.factoryDefaultName
+        case nil:                return nil
+        }
+    }
+
+    /// The routing or matrix has changed since the last load.
+    var loadedPresetModified: Bool {
+        guard let loadedPreset else { return false }
+        return loadedPreset.baseline != currentPresetContent()
+    }
+
+    static let factoryDefaultName = "Factory default"
 
     /// The preset a name belongs to: presets are keyed by name + device,
     /// which is what Save overwrites by and rename refuses to duplicate.
@@ -1565,9 +1636,9 @@ final class MixerState {
     /// Build a snapshot of the current state in `ScarlettPreset` form.  The
     /// snapshot is identical in shape to what `userSavePreset` writes to
     /// the in-app list; the difference is just where it's persisted.
-    func currentSnapshot(named name: String) -> ScarlettPreset {
+    func currentSnapshot(named name: String, id: UUID = UUID()) -> ScarlettPreset {
         ScarlettPreset(
-            id: UUID(),
+            id: id,
             name: name,
             createdAt: Date(),
             schemaVersion: ScarlettPreset.currentSchemaVersion,
@@ -1603,7 +1674,8 @@ final class MixerState {
     func userImportSnapshot(from url: URL) throws {
         let data = try Data(contentsOf: url)
         let preset = try JSONDecoder().decode(ScarlettPreset.self, from: data)
-        try userLoadPreset(preset)
+        try applyPreset(preset)
+        markLoaded(.file(url.lastPathComponent))
         logEvent(.info, "Import", "Imported snapshot \(url.lastPathComponent)")
     }
 
@@ -1717,6 +1789,7 @@ final class MixerState {
         }
 
         saveMatrix()
+        markLoaded(.factoryDefault)
         let defaultedLabel = phonesWValues.isEmpty ? "Monitor" : "Monitor + Phones"
         let routeNote = useMixOutputs ? "\(defaultedLabel) = Mix M1/M2" : "\(defaultedLabel) = DAW 1/2"
         logEvent(.info, "Reset", "Default config applied (\(routeNote))")
@@ -1854,3 +1927,4 @@ final class MixerState {
         return true
     }
 }
+
