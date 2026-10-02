@@ -834,6 +834,8 @@ final class MixerState {
     // MARK: - Meter polling
 
     @ObservationIgnored private var meterPollingStarted = false
+    /// Polling is backed off and the meters have been blanked.
+    @ObservationIgnored private var metersIdle = false
 
     /// Mirror the hardware monitor section (18i20 front-panel knob +
     /// DIM/MUTE).  One extra 4-byte transfer — cheap.
@@ -880,10 +882,18 @@ final class MixerState {
                 let app = AppController.shared
                 let mixerOnScreen = !NSApp.isHidden && app.isMainWindowOnScreen
                 guard mixerOnScreen || app.isPanelOnScreen else {
+                    // Blank the meters, so opening the panel or the window
+                    // doesn't flash the level from when polling stopped.
+                    if !self.metersIdle {
+                        self.metersIdle = true
+                        self.peaks = .empty
+                        self.peaksHeld = .empty
+                    }
                     try? await Task.sleep(nanoseconds: 500_000_000)
                     lastTick = Date()
                     continue
                 }
+                self.metersIdle = false
                 let now = Date()
                 let elapsed = now.timeIntervalSince(lastTick)
                 lastTick = now
