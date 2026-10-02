@@ -97,7 +97,10 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             loginItem.refresh()
         }
-        .onAppear { updates.checkIfNeeded() }
+        .onAppear {
+            loginItem.refresh()
+            updates.checkIfNeeded()
+        }
     }
 }
 
@@ -113,7 +116,9 @@ final class LoginItem {
     /// Login items need a real app bundle; `swift run` has none.
     static var isAvailable: Bool { Bundle.main.bundleURL.pathExtension == "app" }
 
-    init() { refresh() }
+    // No status read here: `@State`'s initial value is built every time the
+    // App's `body` builds `SettingsView`, and the read is a blocking XPC
+    // call.  The view refreshes on appear instead.
 
     func refresh() {
         guard Self.isAvailable else { return }
