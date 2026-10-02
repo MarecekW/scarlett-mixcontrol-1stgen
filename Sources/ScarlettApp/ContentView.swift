@@ -77,7 +77,8 @@ struct ContentView: View {
         .onAppear { AppController.shared.openWindowAction = openWindow }
         // The sidebar's power button sits by the Settings gear, so it
         // asks first; Cmd+Q and the panel's Quit item don't.
-        .confirmationDialog("Quit Scarlett MixControl?", isPresented: $confirmQuit) {
+        .confirmationDialog("Quit Scarlett MixControl?", isPresented: $confirmQuit,
+                            titleVisibility: .visible) {
             Button("Quit", role: .destructive) { AppController.shared.quit() }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -588,7 +589,7 @@ struct DeviceView: View {
                         Button("Reset routing & matrix", role: .destructive) {
                             confirmReset = true
                         }
-                        .help("Route Monitor and Phones to their default sources, turn every other output off, and reset the matrix to its default layout (inputs seeded, levels 0, pans centered, no mutes / solos / links). The pinned DAW return is re-applied automatically. Hardware switches, clock, sample rate and output volumes are untouched.")
+                        .help("Route Monitor and the headphone outputs to their default sources, turn every other output off, reset the matrix to its default layout (inputs seeded, levels 0, pans centered, no mutes / solos / links) and the USB capture routes to their defaults, and turn Monitor mono off. The pinned DAW return is re-applied automatically. Hardware switches, clock, sample rate and output volumes are untouched.")
                         .disabled(!state.isConnected)
                         Spacer()
                     }
@@ -956,17 +957,17 @@ struct Panel<Content: View>: View {
     }
 }
 
-
 extension View {
     /// Confirmation before `userResetRoutingAndMatrix()`, which throws away
     /// the current routing and mix — shared by the Device page and the
     /// Presets page's Factory default.
     func resetConfirmation(isPresented: Binding<Bool>, state: MixerState) -> some View {
-        confirmationDialog("Reset routing & matrix?", isPresented: isPresented) {
+        confirmationDialog("Reset routing & matrix?", isPresented: isPresented,
+                           titleVisibility: .visible) {
             Button("Reset", role: .destructive) { state.userResetRoutingAndMatrix() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Monitor and Phones go back to their default sources, every other output is turned off, and the matrix returns to its default layout. Output volumes and hardware settings are kept.")
+            Text("Monitor and headphone outputs go back to their default sources, every other output is turned off, and the matrix and USB capture routes return to their defaults. Output volumes and hardware settings are kept.")
         }
     }
 }
