@@ -1482,7 +1482,9 @@ final class MixerState {
     /// and its place in the list — the "Update" for a modified preset.
     func userUpdatePreset(_ preset: ScarlettPreset) {
         guard let idx = presets.firstIndex(where: { $0.id == preset.id }) else { return }
-        presets[idx] = currentSnapshot(named: preset.name, id: preset.id)
+        var updated = currentSnapshot(named: preset.name, id: preset.id)
+        updated.createdAt = preset.createdAt
+        presets[idx] = updated
         savePresets()
         markLoaded(.preset(preset.id))
         logEvent(.info, "Presets", "Updated preset \(preset.name)")
@@ -1927,4 +1929,3 @@ final class MixerState {
         return true
     }
 }
-
