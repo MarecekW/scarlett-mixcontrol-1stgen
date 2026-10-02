@@ -45,6 +45,7 @@ struct ContentView: View {
     @Bindable var state: MixerState
     @State private var tab: AppTab = .mixer
     @State private var sidebarCollapsed: Bool = false
+    @State private var confirmQuit = false
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
@@ -74,6 +75,14 @@ struct ContentView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear { AppController.shared.openWindowAction = openWindow }
+        // The sidebar's power button sits by the Settings gear, so it
+        // asks first; Cmd+Q and the panel's Quit item don't.
+        .confirmationDialog("Quit Scarlett MixControl?", isPresented: $confirmQuit) {
+            Button("Quit", role: .destructive) { AppController.shared.quit() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The interface keeps its current mix, but the menu bar controls go away until you open the app again.")
+        }
     }
 
     /// Show the first-launch dialog only when the device is actually
@@ -187,7 +196,7 @@ struct ContentView: View {
             AppController.shared.showSettings(openSettings)
         }
         let quit = sidebarIconButton("power", help: "Quit Scarlett MixControl") {
-            AppController.shared.quit()
+            confirmQuit = true
         }
         if vertical {
             VStack(spacing: 14) { settings; quit }
@@ -480,6 +489,7 @@ extension RoutingView {
 @MainActor
 struct DeviceView: View {
     @Bindable var state: MixerState
+    @State private var confirmReset = false
 
     private func compatRow(symbol: String, color: Color, text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -576,9 +586,9 @@ struct DeviceView: View {
                             .help("Re-read the matrix state (sources + cell gains) from the device. Useful if another tool changed the device behind the app's back, or after a power cycle. Routing isn't refreshed — the firmware doesn't report routes back.")
                             .disabled(!state.isConnected)
                         Button("Reset routing & matrix", role: .destructive) {
-                            state.userResetRoutingAndMatrix()
+                            confirmReset = true
                         }
-                        .help("Clear every output route to Off and reset all matrix channels (levels 0 / pans centered / unmuted / unsoloed / unlinked). The pinned DAW return is re-applied automatically. Hardware switches, clock, sample rate and output volumes are untouched.")
+                        .help("Route Monitor and Phones to their default sources, turn every other output off, and reset the matrix to its default layout (inputs seeded, levels 0, pans centered, no mutes / solos / links). The pinned DAW return is re-applied automatically. Hardware switches, clock, sample rate and output volumes are untouched.")
                         .disabled(!state.isConnected)
                         Spacer()
                     }
@@ -624,6 +634,7 @@ struct DeviceView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
+        .resetConfirmation(isPresented: $confirmReset, state: state)
     }
 
     private var hardwareRows: [InfoGrid.Row] {
@@ -945,3 +956,17 @@ struct Panel<Content: View>: View {
     }
 }
 
+
+extension View {
+    /// Confirmation before `userResetRoutingAndMatrix()`, which throws away
+    /// the current routing and mix — shared by the Device page and the
+    /// Presets page's Factory default.
+    func resetConfirmation(isPresented: Binding<Bool>, state: MixerState) -> some View {
+        confirmationDialog("Reset routing & matrix?", isPresented: isPresented) {
+            Button("Reset", role: .destructive) { state.userResetRoutingAndMatrix() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Monitor and Phones go back to their default sources, every other output is turned off, and the matrix returns to its default layout. Output volumes and hardware settings are kept.")
+        }
+    }
+}
