@@ -76,7 +76,7 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
 
 ## 🔊 Menu bar
 
-By default the app has an icon in the menu bar. Click it for a compact panel with a volume slider, meter and mute for each output, preset recall, Mute all, and **Open Mixer**. Choose which outputs appear under **Mixer → Outputs → Show in menu bar**. Closing the mixer window keeps the app running there; quit from the panel's ⚙ menu or the sidebar's power button.
+By default the app has an icon in the menu bar. Click it for a compact panel with a volume slider, meter and mute for each output, preset recall, Mute all, and **Open Mixer**. Choose which outputs appear under **Mixer → Outputs → Show in menu bar**. Closing the mixer window keeps the app running; quit from the panel's ⚙ menu or the sidebar's power button.
 
 In **Settings** (the ⚙ in the panel or the sidebar; also ⌘, while the Dock icon is shown):
 

@@ -6,8 +6,9 @@ import ScarlettCore
 
 /// The status item's icon: the mixer glyph, a slashed speaker while Mute
 /// all is on, and dimmed while no device is connected.  Also hands SwiftUI's
-/// `openWindow` to `AppController`: the label exists for the app's whole
-/// lifetime, unlike the mixer window or the panel.
+/// `openWindow` to `AppController`: while shown, the label exists for the
+/// app's whole lifetime, unlike the mixer window or the panel.  (With the
+/// icon hidden, the mixer view hands it over instead.)
 @MainActor
 struct MenuBarIcon: View {
     @Bindable var state: MixerState

@@ -82,7 +82,7 @@ struct ContentView: View {
             Button("Quit", role: .destructive) { AppController.shared.quit() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The interface keeps its current mix, but the menu bar controls go away until you open the app again.")
+            Text("The interface keeps its current mix; the app's controls go away until you open it again.")
         }
     }
 

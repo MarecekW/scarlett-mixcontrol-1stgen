@@ -4,7 +4,7 @@ import AppKit
 /// App-level lifecycle shared by the app delegate, the main window and the
 /// menu bar panel: the Dock-icon policy, (re)opening the mixer window, and
 /// quitting.  The app keeps running with no window open — the menu bar icon
-/// is always there to bring the mixer back.
+/// or the Dock icon (at least one is always shown) brings the mixer back.
 @MainActor
 @Observable
 final class AppController {

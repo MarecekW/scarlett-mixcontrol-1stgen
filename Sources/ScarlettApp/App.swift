@@ -90,7 +90,13 @@ struct ScarlettApp: App {
 
         // Can be hidden in Settings, but never together with the Dock
         // icon: one of them is the way back to the app.
-        MenuBarExtra(isInserted: Bindable(AppController.shared).showInMenuBar) {
+        // Read here, not just through a binding, so `body` observes it and
+        // a change in Settings takes effect at once.
+        let showInMenuBar = AppController.shared.showInMenuBar
+        MenuBarExtra(isInserted: Binding(
+            get: { showInMenuBar },
+            set: { AppController.shared.showInMenuBar = $0 }
+        )) {
             MenuBarPanel(state: state)
         } label: {
             MenuBarIcon(state: state)
