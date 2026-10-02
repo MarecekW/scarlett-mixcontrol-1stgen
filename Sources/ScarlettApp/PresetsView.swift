@@ -118,7 +118,8 @@ struct PresetsView: View {
         } message: {
             Text(loadErrorMessage ?? "Unknown error")
         }
-        .resetConfirmation(isPresented: $confirmFactoryDefault, state: state)
+        .resetConfirmation(isPresented: $confirmFactoryDefault, state: state,
+                           title: "Load \(MixerState.factoryDefaultName)?", confirm: "Load")
     }
 
     /// A card's body, stretched to fill its half of the row so both cards

@@ -48,7 +48,7 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
 | 📊  | **Live peak meters** — all 18 inputs + 6 mix buses + 6 DAW playbacks, with held peaks       |
 | 💾  | **Save to hardware** — persist mixer state to device flash, survives power cycle            |
 | 📁  | **Snapshots** — save / load full configurations as `.scmx` JSON files (⌘S / ⌘O)             |
-| 🔊  | **Menu bar panel** — output volumes, mutes, presets and Mute all one click from the menu bar; optionally run without a Dock icon and launch at login |
+| 🔊  | **Menu bar panel** — output volumes, meters, mutes, presets and Mute all one click from the menu bar; optionally run without a Dock icon and launch at login |
 | 🔌  | **Connection resilience** — auto-reconnect on USB drops, clear status overlay               |
 
 <br/>
@@ -76,7 +76,7 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
 
 ## 🔊 Menu bar
 
-The app always has an icon in the menu bar. Click it for a compact panel with a volume slider and mute for each output, preset recall, Mute all, and **Open Mixer**. Choose which outputs appear under **Mixer → Outputs → Show in menu bar**. Closing the mixer window keeps the app running there; quit from the panel's ⚙ menu or the sidebar's power button.
+The app always has an icon in the menu bar. Click it for a compact panel with a volume slider, meter and mute for each output, preset recall, Mute all, and **Open Mixer**. Choose which outputs appear under **Mixer → Outputs → Show in menu bar**. Closing the mixer window keeps the app running there; quit from the panel's ⚙ menu or the sidebar's power button.
 
 In **Settings** (the ⚙ in the panel or the sidebar; also ⌘, while the Dock icon is shown):
 

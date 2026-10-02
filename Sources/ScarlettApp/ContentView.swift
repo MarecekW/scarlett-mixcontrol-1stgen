@@ -961,10 +961,11 @@ extension View {
     /// Confirmation before `userResetRoutingAndMatrix()`, which throws away
     /// the current routing and mix — shared by the Device page and the
     /// Presets page's Factory default.
-    func resetConfirmation(isPresented: Binding<Bool>, state: MixerState) -> some View {
-        confirmationDialog("Reset routing & matrix?", isPresented: isPresented,
-                           titleVisibility: .visible) {
-            Button("Reset", role: .destructive) { state.userResetRoutingAndMatrix() }
+    func resetConfirmation(isPresented: Binding<Bool>, state: MixerState,
+                           title: String = "Reset routing & matrix?",
+                           confirm: String = "Reset") -> some View {
+        confirmationDialog(title, isPresented: isPresented, titleVisibility: .visible) {
+            Button(confirm, role: .destructive) { state.userResetRoutingAndMatrix() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Monitor and headphone outputs go back to their default sources, every other output is turned off, and the matrix and USB capture routes return to their defaults. Output volumes and hardware settings are kept.")
