@@ -42,10 +42,19 @@ enum StripLayout {
     static let pinnedOutset:        CGFloat = 6
 }
 
+/// Height of every strip's fader / meter column, set once for the whole
+/// mixer so all strips match.  Written as a classic EnvironmentKey instead of
+/// `@Entry` so the package also builds with the Command Line Tools toolchain,
+/// which ships without Xcode's SwiftUIMacros plugin.
+private struct FaderHeightKey: EnvironmentKey {
+    static let defaultValue: CGFloat = StripLayout.faderHeight
+}
+
 extension EnvironmentValues {
-    /// Height of every strip's fader / meter column, set once for the whole
-    /// mixer so all strips match.
-    @Entry var faderHeight: CGFloat = StripLayout.faderHeight
+    var faderHeight: CGFloat {
+        get { self[FaderHeightKey.self] }
+        set { self[FaderHeightKey.self] = newValue }
+    }
 }
 
 // Centralised palette to keep the Control-2-style dark look consistent.
