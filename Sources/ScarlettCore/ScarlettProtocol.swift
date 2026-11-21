@@ -316,6 +316,30 @@ public struct HardwareMonitorState: Equatable, Sendable {
         self.dim = dim
         self.mute = mute
     }
+
+    /// Attenuation (dB, -128 … 0) the host has to write into the Monitor
+    /// pair's output gain stages for this front-panel state.
+    ///
+    /// The 1st-gen 18i20 firmware only *reports* the knob and the DIM/MUTE
+    /// buttons — it does not apply them to the audio path itself.  The
+    /// original MixControl polled the panel (`updateMonitorControls`) and
+    /// pushed the values into its output gain (`setGainFromHW` /
+    /// `setDimFromHW` / `setMuteFromHW`), which then went out as a normal
+    /// output-attenuation write.  Without that host-side step the Monitor
+    /// outputs stay at full level whatever the knob says.
+    ///
+    /// - MUTE → off (-128 dB)
+    /// - DIM  → knob position + `dimOffsetDb`
+    /// - else → knob position
+    public func effectiveAttenuationDb(dimOffsetDb: Double = HardwareMonitorState.dimOffsetDb) -> Double {
+        if mute { return -128 }
+        let db = potAttenuationDb + (dim ? dimOffsetDb : 0)
+        return min(0, max(-128, db))
+    }
+
+    /// DIM amount applied on top of the knob.  Matches the app's software
+    /// Dim on the other models (-20 dB).
+    public static let dimOffsetDb: Double = -20
 }
 
 // MARK: - Peak readings
