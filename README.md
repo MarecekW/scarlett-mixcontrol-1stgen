@@ -41,7 +41,7 @@ for the <strong>1st-generation Scarlett 8i6</strong>.
 | 🎛️  | **Full 18 × 6 matrix mixer** with per-cell gain, mute, solo, pan, stereo link               |
 | 🔀  | **Output routing** — every physical output pair (Monitor, Phones, Line, S/PDIF, ADAT) can pick any source (DAW, Analog, Mix M1–M8) |
 | 🎚️  | **Per-output level strips** — pin any analog output pair as a fader strip; digital outs metered honestly (fixed level) |
-| 🕹️  | **Hardware monitor mirroring** — the 18i20's front-panel volume knob and Dim/Mute buttons reflected live in the app |
+| 🕹️  | **Hardware monitor section** — the 18i20's front-panel volume knob and Dim/Mute buttons reflected live in the app and applied to the Monitor outputs (the 1st-gen firmware only reports them; the host has to apply them, like the original MixControl did) |
 | 🎤  | **USB capture routing** — choose what your DAW sees on each input channel                   |
 | 📌  | **Pinned DAW return strip** — DAW 1/2 back into the matrix with one linked fader            |
 | 🔘  | **Hardware switches** — line/inst impedance, hi/lo gain, clock source, sample rate          |
