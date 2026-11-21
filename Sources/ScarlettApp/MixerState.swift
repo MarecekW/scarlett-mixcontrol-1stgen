@@ -160,9 +160,16 @@ final class MixerState {
     var monitorMono: Bool = false
 
     /// Mirror of the 18i20's hardware monitor section (front-panel volume
-    /// knob + DIM/MUTE buttons).  Polled ~1 Hz while connected; read-only —
-    /// the hardware owns these controls, the app just reflects them.
+    /// knob + DIM/MUTE buttons).  Polled while connected.  The hardware owns
+    /// these controls, but on the 1st-gen 18i20 the firmware does not apply
+    /// them to the audio path — the app does, by writing the resulting
+    /// attenuation into the Monitor pair's gain stages (see
+    /// `applyHardwareMonitor`), exactly like the original MixControl.
     var hwMonitor: HardwareMonitorState? = nil
+    /// Last attenuation written to the Monitor pair on behalf of the
+    /// front-panel section, so we only send a USB write when it changes.
+    /// Reset on (re)connect so the first poll always re-applies it.
+    @ObservationIgnored private var appliedHwMonitorDb: Double? = nil
 
     // MARK: - Output pair helpers
 
@@ -538,6 +545,7 @@ final class MixerState {
 
         monitorMono = false
         hwMonitor = nil
+        appliedHwMonitorDb = nil
         showFirstLaunchPrompt = false
         peaks = .empty
         peaksHeld = .empty
@@ -853,6 +861,26 @@ final class MixerState {
             }
         }
         if hwMonitor != hw { hwMonitor = hw }
+        applyHardwareMonitor(hw, to: dev)
+    }
+
+    /// Push the front-panel knob / DIM / MUTE state into the Monitor pair's
+    /// output gain stages.  The 1st-gen 18i20 only reports the panel; the
+    /// host has to apply it (this is what MixControl's `setGainFromHW` did).
+    /// Only writes when the effective value actually changes.
+    private func applyHardwareMonitor(_ hw: HardwareMonitorState, to dev: ScarlettDevice) {
+        let db = hw.effectiveAttenuationDb()
+        guard db != appliedHwMonitorDb else { return }
+        appliedHwMonitorDb = db
+        let monLeft = monitorPairLeftWValue
+        guard profile.hasGainStage(wValue: monLeft) else { return }
+        pairAttens[monLeft] = db
+        let members = pairMembers(leftWValue: monLeft)
+        writeAsync {
+            for wv in members {
+                try? dev.setOutputAttenuation(outputWValue: wv, db: db)
+            }
+        }
     }
 
     private func startMeterPolling() {
@@ -889,7 +917,16 @@ final class MixerState {
                         self.peaks = .empty
                         self.peaksHeld = .empty
                     }
-                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    // The 18i20's front-panel knob only works while we apply
+                    // it, so keep polling it (one cheap 4-byte transfer) even
+                    // with the window closed — fast enough that the knob
+                    // feels immediate.
+                    if self.profile.hasHardwareMonitorControls {
+                        self.pollHardwareMonitor(dev)
+                        try? await Task.sleep(nanoseconds: 100_000_000)
+                    } else {
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                    }
                     lastTick = Date()
                     continue
                 }
