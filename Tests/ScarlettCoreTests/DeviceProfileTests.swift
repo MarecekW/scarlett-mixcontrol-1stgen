@@ -155,4 +155,16 @@ final class DeviceProfileTests: XCTestCase {
         XCTAssertEqual(phones.map(\.wValue), [2, 3, 4, 5])
         XCTAssertEqual(phones.map(\.pairLabel), ["Phones 1", "Phones 1", "Phones 2", "Phones 2"])
     }
+
+    func testHardwareMonitorKnobMapsToMonitorAttenuation() {
+        // Knob alone → its own position.
+        XCTAssertEqual(HardwareMonitorState(potAttenuationDb: 0,   dim: false, mute: false).effectiveAttenuationDb(), 0)
+        XCTAssertEqual(HardwareMonitorState(potAttenuationDb: -25, dim: false, mute: false).effectiveAttenuationDb(), -25)
+        // DIM stacks on top of the knob.
+        XCTAssertEqual(HardwareMonitorState(potAttenuationDb: -10, dim: true,  mute: false).effectiveAttenuationDb(), -30)
+        // MUTE wins over everything.
+        XCTAssertEqual(HardwareMonitorState(potAttenuationDb: -10, dim: true,  mute: true).effectiveAttenuationDb(), -128)
+        // Clamped to the device's range.
+        XCTAssertEqual(HardwareMonitorState(potAttenuationDb: -127, dim: true, mute: false).effectiveAttenuationDb(), -128)
+    }
 }
